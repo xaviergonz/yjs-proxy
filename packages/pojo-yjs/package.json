@@ -1,0 +1,81 @@
+{
+  "name": "pojo-yjs",
+  "version": "1.0.0",
+  "description": "Use Y.js types as if they were plain JavaScript objects using Proxies",
+  "keywords": [
+    "yjs",
+    "crdt",
+    "proxy",
+    "pojo",
+    "shared-data"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/xaviergonz/pojo-yjs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/xaviergonz/pojo-yjs/issues"
+  },
+  "homepage": "https://pojo-yjs.js.org",
+  "license": "MIT",
+  "author": "Javier González Garcés",
+  "source": "./src/index.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "script": "./dist/pojo-yjs.umd.js",
+      "import": "./dist/pojo-yjs.esm.mjs",
+      "require": "./dist/pojo-yjs.umd.js",
+      "default": "./dist/pojo-yjs.esm.mjs"
+    }
+  },
+  "esmodule": "./dist/pojo-yjs.esm.js",
+  "module": "./dist/pojo-yjs.esm.js",
+  "jsnext:main": "./dist/pojo-yjs.esm.js",
+  "react-native": "./dist/pojo-yjs.umd.js",
+  "umd:main": "./dist/pojo-yjs.umd.js",
+  "unpkg": "./dist/pojo-yjs.umd.js",
+  "jsdelivr": "./dist/pojo-yjs.umd.js",
+  "main": "./dist/pojo-yjs.umd.js",
+  "types": "./dist/types/index.d.ts",
+  "typings": "./dist/types/index.d.ts",
+  "sideEffects": false,
+  "files": [
+    "src",
+    "dist",
+    "LICENSE",
+    "CHANGELOG.md",
+    "README.md",
+    "logo.png"
+  ],
+  "scripts": {
+    "quick-build": "tsc",
+    "quick-build-tests": "tsc -p test",
+    "copy-root-files": "shx cp ../../README.md . && shx cp ../../LICENSE . && shx cp ../../CHANGELOG.md .",
+    "build": "pnpm quick-build && pnpm copy-root-files && shx rm -rf dist && vite build && shx cp dist/pojo-yjs.esm.mjs dist/pojo-yjs.esm.js",
+    "test": "vitest run",
+    "test:ci": "vitest run --coverage",
+    "build-docs": "shx rm -rf api-docs && typedoc --options ./typedocconfig.js src/index.ts"
+  },
+  "devDependencies": {
+    "@vitest/coverage-v8": "^4.0.15",
+    "shx": "^0.4.0",
+    "ts-node": "^10.9.2",
+    "typedoc": "^0.28.15",
+    "typescript": "^5.9.3",
+    "vite": "^7.2.6",
+    "vite-plugin-dts": "^4.5.4",
+    "vitest": "^4.0.15",
+    "yjs": "^13.6.27"
+  },
+  "peerDependencies": {
+    "yjs": "^13.0.0"
+  },
+  "dependencies": {
+    "tslib": "^2.8.1"
+  },
+  "directories": {
+    "test": "test"
+  }
+}
