@@ -1,13 +1,20 @@
 {
   "name": "yjs-proxy",
   "version": "1.0.0",
-  "description": "Use Y.js types as if they were plain JavaScript objects using Proxies",
+  "description": "Proxy-based ergonomics for Yjs (CRDT): use Y.Map and Y.Array like plain JS objects and arrays.",
   "keywords": [
     "yjs",
     "crdt",
+    "collaboration",
+    "collaborative",
+    "shared-state",
+    "realtime",
     "proxy",
-    "plain-object",
-    "shared-data"
+    "y-map",
+    "y-array",
+    "typescript",
+    "data-structures",
+    "state-management"
   ],
   "repository": {
     "type": "git",
@@ -16,7 +23,6 @@
   "bugs": {
     "url": "https://github.com/xaviergonz/yjs-proxy/issues"
   },
-  "homepage": "https://yjs-proxy.js.org",
   "license": "MIT",
   "author": "Javier González Garcés",
   "source": "./src/index.ts",
