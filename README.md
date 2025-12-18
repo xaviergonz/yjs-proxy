@@ -34,9 +34,8 @@ It wraps `Y.Map` and `Y.Array` in Proxies so you can read/write shared state usi
 Highlights:
 
 - **Proxy-based API:** Use standard object/array syntax with Yjs types.
-- **Transactional mutations:** Mutations run inside `doc.transact()` when the type is attached to a `Y.Doc`.
 - **Automatic nesting:** Assigning plain objects/arrays creates nested `Y.Map` / `Y.Array` structures.
-- **Raw values (opt-in):** Store plain objects/arrays as-is via `markAsJs` (useful for static metadata).
+- **Raw values (opt-in):** Store plain objects/arrays as-is via `markAsJs` (useful for static data).
 
 ## Contents
 
