@@ -3,7 +3,7 @@
   <h1 align="center">yjs-proxy</h1>
 </p>
 <p align="center">
-  <i>Use Y.js types as if they were plain JavaScript objects using Proxies</i>
+  <i>The most ergonomic way to work with Yjs. Use shared types as plain JavaScript objects.</i>
 </p>
 
 <p align="center">
@@ -25,17 +25,44 @@
   </a>
 </p>
 
-## Introduction
+## Why yjs-proxy?
 
-`yjs-proxy` makes working with Yjs shared types feel like working with plain JavaScript objects.
+Working with Yjs `Y.Map` and `Y.Array` can be verbose, especially with nested structures. You have to manually use `.set()`, `.get()`, and wrap everything in transactions.
 
-It wraps `Y.Map` and `Y.Array` in Proxies so you can read/write shared state using normal property access and array methods, while the library translates those operations into Yjs updates.
+`yjs-proxy` lets you interact with Yjs types using **standard JavaScript syntax**.
 
-Highlights:
+### Before (Vanilla Yjs)
 
-- **Proxy-based API:** Use standard object/array syntax with Yjs types.
-- **Automatic nesting:** Assigning plain objects/arrays creates nested `Y.Map` / `Y.Array` structures.
-- **Raw values (opt-in):** Store plain objects/arrays as-is via `markAsJs` (useful for static data).
+```ts
+const ymap = doc.getMap("state")
+doc.transact(() => {
+  ymap.set("count", 1)
+  const todos = new Y.Array()
+  todos.insert(0, [new Y.Map([["text", "buy milk"], ["done", false]])])
+  ymap.set("todos", todos)
+})
+const text = ymap.get("todos").get(0).get("text")
+```
+
+### After (yjs-proxy)
+
+```ts
+const state = wrapYjs(doc.getMap("state"))
+
+state.count = 1
+state.todos = [{ text: "buy milk", done: false }]
+
+const text = state.todos[0].text // Full autocompletion!
+```
+
+## Features
+
+- ✨ **Proxy-based API**: Use `obj.prop = val` and `arr.push(val)` instead of `.set()` and `.insert()`.
+- 🌲 **Automatic Nesting**: Plain objects and arrays are automatically converted to nested `Y.Map` and `Y.Array`.
+- 🔒 **Type Safe**: Full TypeScript support with deep type inference.
+- ⚡ **Automatic Transactions**: Mutations are automatically wrapped in `doc.transact()` if attached to a document.
+- 🚀 **Zero Dependencies**: Lightweight and fast, built on native Proxies.
+- 💎 **Opt-out CRDT**: Use `markAsJs()` to store large static objects as raw JSON for performance.
 
 ## Contents
 
@@ -43,7 +70,7 @@ Highlights:
 - [Quickstart](#quickstart)
 - [Key concepts](#key-concepts)
 - [API reference](#api-reference)
-- [Array behavior](#array-behavior)
+- [Observing Changes](#observing-changes)
 - [Gotchas & limitations](#gotchas--limitations)
 - [Contributing](#contributing)
 - [License](#license)
@@ -201,18 +228,54 @@ try {
 }
 ```
 
-## Array behavior
+## Observing Changes
 
-`wrapYjs(Y.Array)` aims to feel like a normal JS array, but there are a few important details:
+Since `yjs-proxy` uses standard Yjs types under the hood, you can use the native Yjs API to observe changes. Use `unwrapYjs` to get the underlying `Y.Map` or `Y.Array`.
 
-- **Mutating methods are applied to Yjs** in a single transaction when possible: `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`.
-- **Non-mutating methods** (like `map`, `filter`, `slice`, `toSorted`, etc.) operate on a snapshot and return a plain JS array (though elements will still be proxies if they are nested `Y.Map` or `Y.Array`).
-- **`undefined` is not representable in Yjs.** When you extend an array by setting `length` or writing past the end, missing entries are filled with `null`.
-- **`delete arr[i]` follows standard JS behavior by not shrinking the array.** However, it replaces the slot with `null` instead of leaving a "hole" (because Yjs does not support `undefined` in arrays). Note that since `null` is a value, `i in arr` will still be `true`.
+```ts
+import { unwrapYjs } from "yjs-proxy"
+
+const state = wrapYjs(doc.getMap("state"))
+const yMap = unwrapYjs(state)
+
+yMap.observeDeep((events) => {
+  console.log("State changed!", state.count)
+})
+```
 
 ## Gotchas & limitations
 
 While `yjs-proxy` tries to be as transparent as possible, there are some differences compared to plain JavaScript:
+
+### Array gotchas
+
+#### Mutating methods
+
+Mutating methods are applied to Yjs in a single transaction when possible: `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`.
+
+#### `undefined` in arrays
+
+Yjs does not support `undefined` values in arrays. When you extend an array (e.g. by setting a distant index or increasing `length`), the resulting "holes" are filled with `null` instead of `undefined`. Similarly, explicitly setting an array index to `undefined` will store it as `null`.
+
+```ts
+state.todos = [] // sparse array
+state.todos[5] = { text: "buy milk" }
+console.log(state.todos[0]) // null (not undefined)
+```
+
+#### Array `delete`
+
+Using `delete arr[i]` on a proxied `Y.Array` follows standard JavaScript behavior by not shifting other elements. However, instead of leaving a "hole" (which reads as `undefined`), it replaces the element with `null` because Yjs does not support `undefined` in arrays.
+
+Note that unlike plain JS, `i in arr` will still return `true` after deletion if `i` is within the array's length. Use `splice` if you want to remove the element and shrink the array.
+
+#### Array custom properties
+
+Proxied arrays only support numeric indices and the `length` property. Attempting to set custom properties (e.g., `arr.foo = 123`) will throw a `YjsProxyError`.
+
+#### Non-mutating array methods return snapshots
+
+Methods like `map`, `filter`, `slice`, `toSorted`, etc., return a **plain JS array** snapshot. While the elements themselves remain proxies (if they are nested `Y.Map` or `Y.Array`), the returned array is no longer "live"—mutating it (e.g., via `push`) will not affect the underlying Yjs state.
 
 ### Object gotchas
 
@@ -241,32 +304,6 @@ A wrapped `Y.Map` proxy is created with `Object.create(null)` and its `getProtot
 #### Symbol keys are not supported
 
 Only string keys are supported for objects (`Y.Map`). Attempting to use `Symbol` keys will throw a `YjsProxyError`.
-
-### Array gotchas
-
-#### `undefined` in arrays
-
-Yjs does not support `undefined` values in arrays. When you extend an array (e.g. by setting a distant index or increasing `length`), the resulting "holes" are filled with `null` instead of `undefined`. Similarly, explicitly setting an array index to `undefined` will store it as `null`.
-
-```ts
-state.todos = [] // sparse array
-state.todos[5] = { text: "buy milk" }
-console.log(state.todos[0]) // null (not undefined)
-```
-
-#### Array `delete`
-
-Using `delete arr[i]` on a proxied `Y.Array` follows standard JavaScript behavior by not shifting other elements. However, instead of leaving a "hole" (which reads as `undefined`), it replaces the element with `null` because Yjs does not support `undefined` in arrays.
-
-Note that unlike plain JS, `i in arr` will still return `true` after deletion if `i` is within the array's length. Use `splice` if you want to remove the element and shrink the array.
-
-#### Array custom properties
-
-Proxied arrays only support numeric indices and the `length` property. Attempting to set custom properties (e.g., `arr.foo = 123`) will throw a `YjsProxyError`.
-
-#### Non-mutating array methods return snapshots
-
-Methods like `map`, `filter`, `slice`, `toSorted`, etc., return a **plain JS array** snapshot. While the elements themselves remain proxies (if they are nested `Y.Map` or `Y.Array`), the returned array is no longer "live"—mutating it (e.g., via `push`) will not affect the underlying Yjs state.
 
 ### Other gotchas
 
