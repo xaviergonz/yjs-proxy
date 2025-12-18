@@ -1,6 +1,5 @@
 <p align="center">
-  <img src="./logo.png" height="220" />
-  <h1 align="center">yjs-proxy</h1>
+  <img src="./logo.png" height="220" style="border-radius: 20px;" />
 </p>
 <p align="center">
   <i>The most ergonomic way to work with Yjs. Use shared types as plain JavaScript objects.</i>
