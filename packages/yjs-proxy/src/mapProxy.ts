@@ -1,6 +1,7 @@
 import * as Y from "yjs"
 import { proxyToYjsCache, yjsToProxyCache } from "./cache"
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
+import { failure } from "./error/failure"
 import { StringKeyedObject } from "./types"
 import { unwrapYjs } from "./unwrapYjs"
 import { transactIfPossible } from "./utils"
@@ -47,7 +48,7 @@ export function ymapProxy(ymap: Y.Map<unknown>): StringKeyedObject {
     },
     set(_target, prop, value) {
       if (typeof prop !== "string") {
-        return false
+        throw failure(`Objects do not support symbol properties: ${String(prop)}`)
       }
       return setYMapValue(ymap, prop, value)
     },

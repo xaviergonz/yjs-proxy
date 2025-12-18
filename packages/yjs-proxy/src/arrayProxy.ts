@@ -1,6 +1,7 @@
 import * as Y from "yjs"
 import { proxyToYjsCache, yjsToProxyCache } from "./cache"
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
+import { failure } from "./error/failure"
 import { unwrapYjs } from "./unwrapYjs"
 import { transactIfPossible } from "./utils"
 
@@ -240,7 +241,7 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
       if (index !== undefined) {
         return setYArrayIndex(yarr, index, value)
       }
-      return false
+      throw failure(`Arrays do not support custom properties: ${String(prop)}`)
     },
     deleteProperty(_target, prop) {
       const index = parseArrayIndex(prop)

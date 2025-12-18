@@ -152,7 +152,7 @@ Marks a plain object or array to be stored in Yjs as a raw JSON value, rather th
 
 Notes:
 
-- `markAsJs` returns a **deeply frozen** shallow clone of the input value. Note that because it is a shallow clone, any nested objects/arrays in the original value will also be frozen.
+- `markAsJs` **deeply freezes** the input value.
 - Raw objects/arrays retrieved from Yjs are also treated as raw values and **deeply frozen**.
 - Circular references in raw objects are unsafe for Yjs synchronization (avoid cycles).
 
@@ -208,14 +208,85 @@ try {
 - **Mutating methods are applied to Yjs** in a single transaction when possible: `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`.
 - **Non-mutating methods** (like `map`, `filter`, `slice`, `toSorted`, etc.) operate on a snapshot and return a plain JS array (though elements will still be proxies if they are nested `Y.Map` or `Y.Array`).
 - **`undefined` is not representable in Yjs.** When you extend an array by setting `length` or writing past the end, missing entries are filled with `null`.
-- **`delete arr[i]` does not shrink the array.** It replaces the slot with `null` (preserving array length). Note that `null` is not a true JS "hole", so `i in arr` will still be `true`.
+- **`delete arr[i]` follows standard JS behavior by not shrinking the array.** However, it replaces the slot with `null` instead of leaving a "hole" (because Yjs does not support `undefined` in arrays). Note that since `null` is a value, `i in arr` will still be `true`.
 
 ## Gotchas & limitations
 
-- **Cyclic structures are not supported.** Assigning cyclic plain objects/arrays will throw.
-- **Raw values are immutable (frozen).** Anything stored or returned as a raw object/array is deeply frozen; treat it as read-only.
-- **Only plain objects become `Y.Map`.** Objects that are not plain (e.g. class instances) are stored as raw JSON data. They lose their prototype and methods when retrieved from the shared state.
-- **Prefer plain JSON-ish data.** For shared state, stick to primitives, plain objects, plain arrays, and Yjs types.
+While `yjs-proxy` tries to be as transparent as possible, there are some differences compared to plain JavaScript:
+
+### Object gotchas
+
+#### Identity mismatch
+
+When you assign a plain object or array to a property, it is converted into a `Y.Map` or `Y.Array` and then wrapped in a Proxy. This means the value you read back is **not** the same instance you assigned.
+
+```ts
+const obj = { x: 1 }
+state.a = obj
+console.log(state.a === obj) // false
+```
+
+#### Only plain objects and arrays are supported
+
+Only plain objects (those with `Object.prototype` or `null` as their prototype) and arrays are supported for automatic conversion to `Y.Map` and `Y.Array`.
+
+Attempting to assign other types of objects (like class instances, `Map`, `Set`, etc.) will throw a `YjsProxyError`. If you need to store such objects, you must either convert them to plain objects first or use `markAsJs` to store them as raw data.
+
+`Uint8Array` and other Yjs types (like `Y.Text`, `Y.XmlFragment`, etc.) are also supported as they are natively handled by Yjs.
+
+#### Map proxies have `null` prototype
+
+A wrapped `Y.Map` proxy is created with `Object.create(null)` and its `getPrototypeOf()` returns `null`. This means `value instanceof Object` will be `false` for these proxies.
+
+#### Symbol keys are not supported
+
+Only string keys are supported for objects (`Y.Map`). Attempting to use `Symbol` keys will throw a `YjsProxyError`.
+
+### Array gotchas
+
+#### `undefined` in arrays
+
+Yjs does not support `undefined` values in arrays. When you extend an array (e.g. by setting a distant index or increasing `length`), the resulting "holes" are filled with `null` instead of `undefined`. Similarly, explicitly setting an array index to `undefined` will store it as `null`.
+
+```ts
+state.todos = [] // sparse array
+state.todos[5] = { text: "buy milk" }
+console.log(state.todos[0]) // null (not undefined)
+```
+
+#### Array `delete`
+
+Using `delete arr[i]` on a proxied `Y.Array` follows standard JavaScript behavior by not shifting other elements. However, instead of leaving a "hole" (which reads as `undefined`), it replaces the element with `null` because Yjs does not support `undefined` in arrays.
+
+Note that unlike plain JS, `i in arr` will still return `true` after deletion if `i` is within the array's length. Use `splice` if you want to remove the element and shrink the array.
+
+#### Array custom properties
+
+Proxied arrays only support numeric indices and the `length` property. Attempting to set custom properties (e.g., `arr.foo = 123`) will throw a `YjsProxyError`.
+
+#### Non-mutating array methods return snapshots
+
+Methods like `map`, `filter`, `slice`, `toSorted`, etc., return a **plain JS array** snapshot. While the elements themselves remain proxies (if they are nested `Y.Map` or `Y.Array`), the returned array is no longer "live"—mutating it (e.g., via `push`) will not affect the underlying Yjs state.
+
+### Other gotchas
+
+#### Cyclic structures
+
+Yjs does not support cyclic structures. Attempting to assign an object with circular references will throw an error.
+
+#### Raw values are frozen
+
+Objects marked with `markAsJs` are **deeply frozen**. Any attempt to mutate them will throw an error in strict mode.
+
+```ts
+const raw = markAsJs({ a: 1 })
+state.raw = raw
+state.raw.a = 2 // Throws!
+```
+
+#### `Object.defineProperty` limitations
+
+Proxies only support value-based property definitions. Attempting to define accessors (getters/setters) or non-value descriptors will fail.
 
 ## Contributing
 

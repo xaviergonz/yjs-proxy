@@ -20,6 +20,10 @@ export function isYArray(value: unknown): value is Y.Array<unknown> {
   return value instanceof Y.Array
 }
 
+export function isYType(value: unknown): value is Y.AbstractType<any> {
+  return value instanceof Y.AbstractType
+}
+
 export function transactIfPossible<T>(yType: Y.Map<any> | Y.Array<any>, fn: () => T): T {
   const doc = (yType as any).doc
   if (doc) {

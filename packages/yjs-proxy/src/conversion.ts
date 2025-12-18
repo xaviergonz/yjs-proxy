@@ -3,10 +3,10 @@ import { markedAsJsValues } from "./cache"
 import { failure } from "./error/failure"
 import { isMarkedAsJs } from "./markAsJs"
 import { unwrapYjs } from "./unwrapYjs"
-import { deepFreeze, isObjectLike, isPlainObject, isYArray, isYMap } from "./utils"
+import { deepFreeze, isObjectLike, isPlainObject, isYArray, isYMap, isYType } from "./utils"
 import { wrapYjs } from "./wrapYjs"
 
-function isYTypeDeleted(yType: Y.Map<any> | Y.Array<any>): boolean {
+function isYTypeDeleted(yType: Y.AbstractType<any>): boolean {
   return !!(yType as any)._item?.deleted || !!yType.doc?.isDestroyed
 }
 
@@ -18,7 +18,7 @@ function isYTypeDeleted(yType: Y.Map<any> | Y.Array<any>): boolean {
  */
 export function convertJsToYjsValue(value: any, seen: WeakSet<object> = new WeakSet()): unknown {
   const unwrapped = unwrapYjs(value)
-  const yType = unwrapped ?? (isYMap(value) || isYArray(value) ? value : undefined)
+  const yType = unwrapped ?? (isYType(value) ? value : undefined)
 
   if (yType) {
     if (isYTypeDeleted(yType)) {
@@ -69,7 +69,15 @@ export function convertJsToYjsValue(value: any, seen: WeakSet<object> = new Weak
     return ymap
   }
 
-  return value
+  if (value instanceof Uint8Array) {
+    return value
+  }
+
+  throw failure(
+    `Unsupported value type: ${Object.prototype.toString.call(
+      value
+    )}. Only plain objects, arrays, Uint8Array and values marked with markAsJs are supported.`
+  )
 }
 
 export function convertYjsToJsValue(value: unknown, clone: boolean): unknown {
