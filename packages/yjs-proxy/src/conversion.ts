@@ -1,10 +1,10 @@
 import * as Y from "yjs"
-import { rawPojos } from "./cache"
+import { markedAsJsValues } from "./cache"
 import { failure } from "./error/failure"
-import { getYjsForPojo } from "./getYjsForPojo"
-import { isRawPojo } from "./rawPojo"
+import { isMarkedAsJs } from "./markAsJs"
+import { unwrapYjs } from "./unwrapYjs"
 import { deepFreeze, isObjectLike, isPlainObject, isYArray, isYMap } from "./utils"
-import { yjsAsPojo } from "./yjsAsPojo"
+import { wrapYjs } from "./wrapYjs"
 
 function cloneYjsTypeIfParented<T extends Y.Map<any> | Y.Array<any>>(yType: T): T {
   if (yType.parent !== null || yType.doc !== null) {
@@ -18,7 +18,7 @@ export function convertJsToYjsValue(
   contextYType: Y.Map<any> | Y.Array<any>,
   seen: WeakSet<object>
 ): unknown {
-  const unwrapped = getYjsForPojo(value)
+  const unwrapped = unwrapYjs(value)
   if (unwrapped) {
     return cloneYjsTypeIfParented(unwrapped)
   }
@@ -28,10 +28,10 @@ export function convertJsToYjsValue(
   }
 
   if (!isObjectLike(value)) return value
-  if (isRawPojo(value)) return value
+  if (isMarkedAsJs(value)) return value
 
   if (seen.has(value)) {
-    throw failure("Cyclic POJOs are not supported")
+    throw failure("Cyclic objects are not supported")
   }
 
   if (Array.isArray(value)) {
@@ -60,11 +60,11 @@ export function convertJsToYjsValue(
 
 export function convertYjsToJsValue(value: unknown): unknown {
   if (isYMap(value) || isYArray(value)) {
-    return yjsAsPojo(value as any)
+    return wrapYjs(value as any)
   }
   if (isObjectLike(value)) {
     deepFreeze(value)
-    rawPojos.add(value)
+    markedAsJsValues.add(value)
   }
   return value
 }

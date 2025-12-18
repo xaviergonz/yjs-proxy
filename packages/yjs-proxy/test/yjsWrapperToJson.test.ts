@@ -1,23 +1,23 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { pojoToJson, rawPojo, yjsAsPojo } from "../src/index"
+import { markAsJs, wrapYjs, yjsWrapperToJson } from "../src/index"
 
-describe("pojoToJson", () => {
+describe("yjsWrapperToJson", () => {
   test("converts proxies to plain JSON recursively", () => {
     const doc = new Y.Doc()
     const ymap = doc.getMap("m")
-    const pojo = yjsAsPojo<any>(ymap)
+    const js = wrapYjs<any>(ymap)
 
     const bin = new Uint8Array([1, 2, 3])
-    const raw = rawPojo({ secret: 42 })
+    const raw = markAsJs({ secret: 42 })
 
-    pojo.a = 1
-    pojo.obj = { b: 2 }
-    pojo.arr = [3, { c: 4 }]
-    pojo.bin = bin
-    pojo.raw = raw
+    js.a = 1
+    js.obj = { b: 2 }
+    js.arr = [3, { c: 4 }]
+    js.bin = bin
+    js.raw = raw
 
-    const json = pojoToJson(pojo)
+    const json = yjsWrapperToJson(js)
 
     expect(json).toEqual({
       a: 1,
@@ -36,9 +36,11 @@ describe("pojoToJson", () => {
   })
 
   test("throws on non-proxy values", () => {
-    expect(() => pojoToJson({})).toThrow("pojoToJson only supports yjsAsPojo proxies")
-    expect(() => pojoToJson([])).toThrow("pojoToJson only supports yjsAsPojo proxies")
-    expect(() => pojoToJson(null)).toThrow("pojoToJson only supports yjsAsPojo proxies")
-    expect(() => pojoToJson(123 as any)).toThrow("pojoToJson only supports yjsAsPojo proxies")
+    expect(() => yjsWrapperToJson({})).toThrow("yjsWrapperToJson only supports wrapYjs proxies")
+    expect(() => yjsWrapperToJson([])).toThrow("yjsWrapperToJson only supports wrapYjs proxies")
+    expect(() => yjsWrapperToJson(null)).toThrow("yjsWrapperToJson only supports wrapYjs proxies")
+    expect(() => yjsWrapperToJson(123 as any)).toThrow(
+      "yjsWrapperToJson only supports wrapYjs proxies"
+    )
   })
 })

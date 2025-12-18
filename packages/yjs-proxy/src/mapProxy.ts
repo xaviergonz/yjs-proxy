@@ -1,8 +1,8 @@
 import * as Y from "yjs"
 import { proxyToYjsCache, yjsToProxyCache } from "./cache"
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
-import { getYjsForPojo } from "./getYjsForPojo"
 import { StringKeyedObject } from "./types"
+import { unwrapYjs } from "./unwrapYjs"
 import { transactIfPossible } from "./utils"
 
 function setYMapValue(ymap: Y.Map<unknown>, prop: string, value: any): boolean {
@@ -10,7 +10,7 @@ function setYMapValue(ymap: Y.Map<unknown>, prop: string, value: any): boolean {
     const current = ymap.get(prop)
     if (current === value) return true
 
-    const unwrapped = getYjsForPojo(value)
+    const unwrapped = unwrapYjs(value)
     if (unwrapped && unwrapped === current) return true
   }
 

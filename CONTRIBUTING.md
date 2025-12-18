@@ -1,6 +1,6 @@
 # Contributor Guide
 
-Welcome to a community of developers just like you, striving to create the best experience around pojo-yjs. We welcome anyone who wants to contribute or provide constructive feedback, no matter the age or level of experience.
+Welcome to a community of developers just like you, striving to create the best experience around yjs-proxy. We welcome anyone who wants to contribute or provide constructive feedback, no matter the age or level of experience.
 
 Here are some ways to contribute to the project, from easiest to most difficult:
 
@@ -23,7 +23,7 @@ Improving the documentation, examples, and other open source content can be the 
 
 ### Responding to issues
 
-In addition to reporting issues, a great way to contribute to pojo-yjs is to respond to other peoples' issues and try to identify the problem or help them work around it. If you’re interested in taking a more active role in this process, please go ahead and respond to issues.
+In addition to reporting issues, a great way to contribute to yjs-proxy is to respond to other peoples' issues and try to identify the problem or help them work around it. If you’re interested in taking a more active role in this process, please go ahead and respond to issues.
 
 ### Small bug fixes
 

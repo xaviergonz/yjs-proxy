@@ -1,7 +1,7 @@
 import * as Y from "yjs"
 import { proxyToYjsCache, yjsToProxyCache } from "./cache"
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
-import { getYjsForPojo } from "./getYjsForPojo"
+import { unwrapYjs } from "./unwrapYjs"
 import { transactIfPossible } from "./utils"
 
 function snapshotArray(yarr: Y.Array<unknown>): unknown[] {
@@ -57,7 +57,7 @@ function setYArrayIndex(yarr: Y.Array<unknown>, index: number, value: any): bool
   const current = index < yarr.length ? yarr.get(index) : undefined
   if (current === value && value !== undefined) return true
 
-  const unwrapped = getYjsForPojo(value)
+  const unwrapped = unwrapYjs(value)
   if (unwrapped && unwrapped === current) return true
 
   const seen = new WeakSet<object>()

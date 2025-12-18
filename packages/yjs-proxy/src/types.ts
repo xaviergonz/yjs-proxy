@@ -1,3 +1,3 @@
 export type StringKeyedObject = Record<string, any>
 
-export type PojoProxy = object
+export type YjsProxy = object

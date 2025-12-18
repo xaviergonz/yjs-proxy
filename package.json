@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "license": "MIT",
   "scripts": {
-    "lib:build": "turbo run pojo-yjs#build",
-    "lib:build-docs": "turbo run pojo-yjs#build-docs",
-    "lib:test": "turbo run pojo-yjs#test",
-    "lib:test:ci": "turbo run pojo-yjs#test:ci",
+    "lib:build": "turbo run yjs-proxy#build",
+    "lib:build-docs": "turbo run yjs-proxy#build-docs",
+    "lib:test": "turbo run yjs-proxy#test",
+    "lib:test:ci": "turbo run yjs-proxy#test:ci",
     "lint": "biome lint"
   },
   "dependencies": {

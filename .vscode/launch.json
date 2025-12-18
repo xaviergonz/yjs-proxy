@@ -7,13 +7,13 @@
     {
       "type": "node",
       "request": "launch",
-      "name": "pojo-yjs - Jest debug current file",
-      "program": "${workspaceFolder}/packages/pojo-yjs/node_modules/jest/bin/jest.js",
+      "name": "yjs-proxy - Jest debug current file",
+      "program": "${workspaceFolder}/packages/yjs-proxy/node_modules/jest/bin/jest.js",
       "args": ["--verbose", "-i", "--no-cache", "--testPathPattern", "${fileBasename}"],
       "console": "integratedTerminal",
       "internalConsoleOptions": "neverOpen",
       "skipFiles": ["**/node_modules/**", "<node_internals>/**"],
-      "cwd": "${workspaceFolder}/packages/pojo-yjs"
+      "cwd": "${workspaceFolder}/packages/yjs-proxy"
     }
   ]
 }

@@ -31,7 +31,7 @@ importers:
         specifier: ^4.5.4
         version: 4.5.4(@types/node@24.10.4)(rollup@4.53.5)(typescript@5.9.3)(vite@7.3.0(@types/node@24.10.4)(yaml@2.8.2))
 
-  packages/pojo-yjs:
+  packages/yjs-proxy:
     dependencies:
       tslib:
         specifier: ^2.8.1

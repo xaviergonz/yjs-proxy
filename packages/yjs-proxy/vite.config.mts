@@ -9,7 +9,7 @@ export default defineConfig({
     target: "node10",
     lib: {
       entry: resolvePath("./src/index.ts"),
-      name: "pojo-yjs",
+      name: "yjs-proxy",
     },
     sourcemap: "inline",
     minify: false,
@@ -20,10 +20,10 @@ export default defineConfig({
       output: [
         {
           format: "esm",
-          entryFileNames: "pojo-yjs.esm.mjs",
+          entryFileNames: "yjs-proxy.esm.mjs",
         },
         {
-          name: "pojo-yjs",
+          name: "yjs-proxy",
           format: "umd",
           globals: {
             yjs: "Y",

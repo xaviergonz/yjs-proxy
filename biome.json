@@ -6,13 +6,8 @@
       "**",
       "!**/node_modules",
       "!**/dist",
-      "!packages/pojo-yjs/coverage",
-      "!packages/pojo-yjs/api-docs",
-      "!apps/site/.docusaurus",
-      "!apps/site/build",
-      "!apps/site/copy-to-build",
-      "!apps/site/static/api",
-      "!apps/site/docs/examples"
+      "!packages/yjs-proxy/coverage",
+      "!packages/yjs-proxy/api-docs"
     ]
   },
   "formatter": {
@@ -80,14 +75,7 @@
         "noReactSpecificProps": "off"
       }
     },
-    "includes": [
-      "**/apps/site/src/**/*.ts",
-      "**/apps/site/src/**/*.tsx",
-      "**/apps/site/docs/**/*.ts",
-      "**/apps/site/docs/**/*.tsx",
-      "**/packages/pojo-yjs/src/**/*.ts",
-      "**/packages/pojo-yjs/test/**/*.ts"
-    ]
+    "includes": ["**/packages/yjs-proxy/src/**/*.ts", "**/packages/yjs-proxy/test/**/*.ts"]
   },
   "javascript": {
     "formatter": {

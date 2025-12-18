@@ -1,22 +1,22 @@
 {
-  "name": "pojo-yjs",
+  "name": "yjs-proxy",
   "version": "1.0.0",
   "description": "Use Y.js types as if they were plain JavaScript objects using Proxies",
   "keywords": [
     "yjs",
     "crdt",
     "proxy",
-    "pojo",
+    "plain-object",
     "shared-data"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/xaviergonz/pojo-yjs.git"
+    "url": "https://github.com/xaviergonz/yjs-proxy.git"
   },
   "bugs": {
-    "url": "https://github.com/xaviergonz/pojo-yjs/issues"
+    "url": "https://github.com/xaviergonz/yjs-proxy/issues"
   },
-  "homepage": "https://pojo-yjs.js.org",
+  "homepage": "https://yjs-proxy.js.org",
   "license": "MIT",
   "author": "Javier González Garcés",
   "source": "./src/index.ts",
@@ -24,20 +24,20 @@
     "./package.json": "./package.json",
     ".": {
       "types": "./dist/types/index.d.ts",
-      "script": "./dist/pojo-yjs.umd.js",
-      "import": "./dist/pojo-yjs.esm.mjs",
-      "require": "./dist/pojo-yjs.umd.js",
-      "default": "./dist/pojo-yjs.esm.mjs"
+      "script": "./dist/yjs-proxy.umd.js",
+      "import": "./dist/yjs-proxy.esm.mjs",
+      "require": "./dist/yjs-proxy.umd.js",
+      "default": "./dist/yjs-proxy.esm.mjs"
     }
   },
-  "esmodule": "./dist/pojo-yjs.esm.js",
-  "module": "./dist/pojo-yjs.esm.js",
-  "jsnext:main": "./dist/pojo-yjs.esm.js",
-  "react-native": "./dist/pojo-yjs.umd.js",
-  "umd:main": "./dist/pojo-yjs.umd.js",
-  "unpkg": "./dist/pojo-yjs.umd.js",
-  "jsdelivr": "./dist/pojo-yjs.umd.js",
-  "main": "./dist/pojo-yjs.umd.js",
+  "esmodule": "./dist/yjs-proxy.esm.js",
+  "module": "./dist/yjs-proxy.esm.js",
+  "jsnext:main": "./dist/yjs-proxy.esm.js",
+  "react-native": "./dist/yjs-proxy.umd.js",
+  "umd:main": "./dist/yjs-proxy.umd.js",
+  "unpkg": "./dist/yjs-proxy.umd.js",
+  "jsdelivr": "./dist/yjs-proxy.umd.js",
+  "main": "./dist/yjs-proxy.umd.js",
   "types": "./dist/types/index.d.ts",
   "typings": "./dist/types/index.d.ts",
   "sideEffects": false,
@@ -53,7 +53,7 @@
     "quick-build": "tsc",
     "quick-build-tests": "tsc -p test",
     "copy-root-files": "shx cp ../../README.md . && shx cp ../../LICENSE . && shx cp ../../CHANGELOG.md .",
-    "build": "pnpm quick-build && pnpm copy-root-files && shx rm -rf dist && vite build && shx cp dist/pojo-yjs.esm.mjs dist/pojo-yjs.esm.js",
+    "build": "pnpm quick-build && pnpm copy-root-files && shx rm -rf dist && vite build && shx cp dist/yjs-proxy.esm.mjs dist/yjs-proxy.esm.js",
     "test": "vitest run",
     "test:ci": "vitest run --coverage",
     "build-docs": "shx rm -rf api-docs && typedoc --options ./typedocconfig.js src/index.ts"
