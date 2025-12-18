@@ -1,4 +1,6 @@
-import { Dispose } from "../src/utils/disposable"
+import { afterEach } from "vitest"
+
+export type Dispose = () => void
 
 const disposers: Dispose[] = []
 
@@ -11,22 +13,4 @@ afterEach(() => {
 
 export function autoDispose(disposer: Dispose) {
   disposers.push(disposer)
-}
-
-export async function delay(x: number) {
-  return new Promise<number>((r) =>
-    setTimeout(() => {
-      r(x)
-    }, x)
-  )
-}
-
-export function timeMock() {
-  const now = Date.now()
-
-  return {
-    async advanceTimeTo(x: number) {
-      await delay(now + x - Date.now())
-    },
-  }
 }

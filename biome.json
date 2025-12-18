@@ -1,5 +1,5 @@
 {
-  "$schema": "https://biomejs.dev/schemas/2.3.8/schema.json",
+  "$schema": "https://biomejs.dev/schemas/2.3.10/schema.json",
   "vcs": { "enabled": true, "clientKind": "git", "useIgnoreFile": true, "defaultBranch": "master" },
   "files": {
     "includes": [
@@ -86,7 +86,7 @@
       "**/apps/site/docs/**/*.ts",
       "**/apps/site/docs/**/*.tsx",
       "**/packages/pojo-yjs/src/**/*.ts",
-      "**/packages/pojo-yjs/test/**/*.ts",
+      "**/packages/pojo-yjs/test/**/*.ts"
     ]
   },
   "javascript": {

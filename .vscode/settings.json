@@ -10,12 +10,12 @@
   "typescript.preferences.importModuleSpecifier": "relative",
   "workbench.colorCustomizations": {
     "commandCenter.border": "#e7e7e799",
-    "sash.hoverBorder": "#3da05e",
-    "titleBar.activeBackground": "#2f7b48",
+    "sash.hoverBorder": "#dd166f",
+    "titleBar.activeBackground": "#af1158",
     "titleBar.activeForeground": "#e7e7e7",
-    "titleBar.inactiveBackground": "#2f7b4899",
+    "titleBar.inactiveBackground": "#af115899",
     "titleBar.inactiveForeground": "#e7e7e799"
   },
-  "peacock.color": "#2f7b48",
+  "peacock.color": "#af1158",
   "cmake.ignoreCMakeListsMissing": true
 }
