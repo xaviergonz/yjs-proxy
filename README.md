@@ -18,29 +18,38 @@
   </a>
   <br />
   <a aria-label="CI" href="https://github.com/xaviergonz/yjs-proxy/actions/workflows/main.yml">
-    <img src="https://img.shields.io/github/actions/workflow/status/yjs-proxy/main.yml?branch=master&label=CI&logo=github&style=for-the-badge&labelColor=333" />
+    <img src="https://img.shields.io/github/actions/workflow/status/xaviergonz/yjs-proxy/main.yml?branch=master&label=CI&logo=github&style=for-the-badge&labelColor=333" />
   </a>
   <a aria-label="Codecov" href="https://codecov.io/gh/xaviergonz/yjs-proxy">
-    <img src="https://img.shields.io/codecov/c/github/yjs-proxy?token=6MLRFUBK8V&label=codecov&logo=codecov&style=for-the-badge&labelColor=333" />
+    <img src="https://img.shields.io/codecov/c/github/xaviergonz/yjs-proxy?token=6MLRFUBK8V&label=codecov&logo=codecov&style=for-the-badge&labelColor=333" />
   </a>
 </p>
 
-> ### Full documentation can be found on the site:
->
-> ## [yjs-proxy.js.org](https://yjs-proxy.js.org)
-
 ## Introduction
 
-`yjs-proxy` makes working with Y.js types (Maps, Arrays, etc.) as easy as working with plain JavaScript objects. By using Proxies, it provides a seamless developer experience where you can read and write to your shared data structures using standard object and array syntax, while `yjs-proxy` handles the underlying Y.js operations automatically.
+`yjs-proxy` makes working with Yjs shared types feel like working with plain JavaScript objects.
 
-By using `yjs-proxy`, you get:
+It wraps `Y.Map` and `Y.Array` in Proxies so you can read/write shared state using normal property access and array methods, while the library translates those operations into Yjs updates.
 
-- **Proxy-based API:** Interact with Y.js types using standard JS object and array syntax.
-- **Automatic Synchronization:** Changes made to the proxy are automatically reflected in the underlying Y.js types.
-- **Type Safety:** Full TypeScript support for your shared data structures.
-- **Lightweight:** Minimal overhead over Y.js.
+Highlights:
 
-### Installation
+- **Proxy-based API:** Use standard object/array syntax with Yjs types.
+- **Transactional mutations:** Mutations run inside `doc.transact()` when the type is attached to a `Y.Doc`.
+- **Automatic nesting:** Assigning plain objects/arrays creates nested `Y.Map` / `Y.Array` structures.
+- **Raw values (opt-in):** Store plain objects/arrays as-is via `markAsJs` (useful for static metadata).
+
+## Contents
+
+- [Installation](#installation)
+- [Quickstart](#quickstart)
+- [Key concepts](#key-concepts)
+- [API reference](#api-reference)
+- [Array behavior](#array-behavior)
+- [Gotchas & limitations](#gotchas--limitations)
+- [Contributing](#contributing)
+- [License](#license)
+
+## Installation
 
 ```bash
 npm install yjs-proxy
@@ -50,11 +59,48 @@ pnpm add yjs-proxy
 yarn add yjs-proxy
 ```
 
-## API Guide
+## Quickstart
+
+```ts
+import * as Y from "yjs"
+import { wrapYjs } from "yjs-proxy"
+
+type State = {
+  count: number
+  todos: { id: string; text: string; done: boolean }[]
+}
+
+const doc = new Y.Doc()
+const ystate = doc.getMap("state")
+
+const state = wrapYjs<State>(ystate)
+
+state.count = 1
+state.todos = [{ id: "1", text: "ship it", done: false }]
+state.todos.push({ id: "2", text: "write docs", done: true })
+
+state.todos[0].done = true
+```
+
+## Key concepts
+
+- **Only `Y.Map` and `Y.Array` are proxied.** `wrapYjs` throws if you pass a different type.
+- **Plain objects/arrays become CRDTs.** Assigning `{}` or `[]` recursively becomes nested `Y.Map` / `Y.Array`.
+- **Existing proxies/Yjs types are reused.** Assigning a `wrapYjs` proxy or a `Y.Map`/`Y.Array` keeps the same underlying structure (cloned when necessary).
+- **Transactions are automatic when attached to a doc.** If the wrapped type is attached to a `Y.Doc`, mutations are wrapped in `doc.transact()`.
+- **Raw values are supported (and frozen).** You can opt out of CRDT conversion for a specific object/array using `markAsJs`.
+
+## API reference
+
+This section documents the public exports from `yjs-proxy`.
 
 ### `wrapYjs(yType)`
 
 Wraps a `Y.Map` or `Y.Array` in a Proxy that behaves like a plain JS object or array.
+
+- Reads return proxied nested `Y.Map`/`Y.Array` values.
+- Writes convert plain objects/arrays into nested Yjs types.
+- Mutations run inside a Yjs transaction when possible.
 
 ```typescript
 import * as Y from "yjs"
@@ -80,6 +126,10 @@ delete js.a
 
 Converts a plain JS object/array into a Yjs-backed structure, or unwraps an existing proxy back to its underlying Yjs type.
 
+- `toYjs(wrapYjsProxy)` returns the underlying `Y.Map` / `Y.Array`.
+- `toYjs(plainObject)` returns a new `Y.Map`.
+- `toYjs(plainArray)` returns a new `Y.Array`.
+
 ```typescript
 import { toYjs } from "yjs-proxy"
 
@@ -101,7 +151,11 @@ const yType = unwrapYjs(js) // Returns Y.Map or Y.Array
 
 Marks a plain object or array to be stored in Yjs as a raw JSON value, rather than being converted into a `Y.Map` or `Y.Array`. This is useful for data that doesn't need CRDT properties or for performance optimization of large, static data.
 
-Note: `markAsJs` returns a **deeply frozen** shallow clone of the input value. Any plain objects or arrays retrieved from Yjs that were stored as raw values will also be deeply frozen.
+Notes:
+
+- `markAsJs` returns a **deeply frozen** shallow clone of the input value.
+- Raw objects/arrays retrieved from Yjs are also treated as raw values and **deeply frozen**.
+- Circular references in raw objects are unsafe for Yjs synchronization (avoid cycles).
 
 ```typescript
 import { markAsJs } from "yjs-proxy"
@@ -132,17 +186,42 @@ const json = yjsWrapperToJson(js)
 console.log(json) // { a: 1, nested: { b: "hello" } }
 ```
 
-### Array Operations
+### `YjsProxyError`
 
-All standard array methods are supported, including mutating ones like `push`, `pop`, `splice`, `sort`, and `reverse`. These are automatically wrapped in a single Yjs transaction.
+Some invalid operations throw a `YjsProxyError` (for example, passing unsupported values to `wrapYjs` / `toYjs` / `yjsWrapperToJson`).
 
-```typescript
-const yarr = wrapYjs<number[]>(ydoc.getArray("myarray"))
-yarr.push(1, 2, 3)
-yarr.sort() // Mutates the underlying Y.Array in one transaction
+```ts
+import { YjsProxyError } from "yjs-proxy"
+
+try {
+  // ...
+} catch (e) {
+  if (e instanceof YjsProxyError) {
+    // handle expected yjs-proxy errors
+  }
+}
 ```
 
-Non-mutating methods like `map`, `filter`, `toSorted`, etc., return plain JS arrays.
+## Array behavior
 
+`wrapYjs(Y.Array)` aims to feel like a normal JS array, but there are a few important details:
 
+- **Mutating methods are applied to Yjs** in a single transaction when possible: `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`.
+- **Non-mutating methods** (like `map`, `filter`, `slice`, `toSorted`, etc.) operate on a snapshot and return plain JS values.
+- **`undefined` is not representable in Yjs.** When you extend an array by setting `length` or writing past the end, missing entries are filled with `null`.
+- **`delete arr[i]` does not shrink the array.** It replaces the slot with `null` (preserving array length), matching JS “hole” semantics as closely as possible.
 
+## Gotchas & limitations
+
+- **Cyclic structures are not supported.** Assigning cyclic plain objects/arrays will throw.
+- **Raw values are immutable (frozen).** Anything stored or returned as a raw object/array is deeply frozen; treat it as read-only.
+- **Only plain objects become `Y.Map`.** Objects that are not plain (e.g. class instances) are stored as-is and won’t become CRDTs.
+- **Prefer plain JSON-ish data.** For shared state, stick to primitives, plain objects, plain arrays, and Yjs types.
+
+## Contributing
+
+See [CONTRIBUTING.md](./CONTRIBUTING.md).
+
+## License
+
+MIT. See [LICENSE](./LICENSE).
