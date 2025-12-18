@@ -4,8 +4,8 @@ import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
 import { unwrapYjs } from "./unwrapYjs"
 import { transactIfPossible } from "./utils"
 
-function snapshotArray(yarr: Y.Array<unknown>): unknown[] {
-  return Array.from(yarr, convertYjsToJsValue)
+function snapshotArray(yarr: Y.Array<unknown>, clone: boolean): unknown[] {
+  return Array.from(yarr, (v) => convertYjsToJsValue(v, clone))
 }
 
 function parseArrayIndex(prop: PropertyKey): number | undefined {
@@ -60,9 +60,9 @@ function setYArrayIndex(yarr: Y.Array<unknown>, index: number, value: any): bool
   const unwrapped = unwrapYjs(value)
   if (unwrapped && unwrapped === current) return true
 
-  const seen = new WeakSet<object>()
-  const converted = convertJsToYjsValue(value, yarr, seen)
   transactIfPossible(yarr, () => {
+    const converted = convertJsToYjsValue(value)
+
     if (index < yarr.length) {
       yarr.delete(index, 1)
       yarr.insert(index, [converted])
@@ -97,14 +97,14 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
       if (prop === Symbol.iterator) {
         return function* iterator() {
           for (const v of yarr) {
-            yield convertYjsToJsValue(v)
+            yield convertYjsToJsValue(v, false)
           }
         }
       }
       if (prop === "length") return yarr.length
       const index = parseArrayIndex(prop)
       if (index !== undefined) {
-        return convertYjsToJsValue(yarr.get(index))
+        return convertYjsToJsValue(yarr.get(index), false)
       }
 
       if (typeof prop === "string") {
@@ -114,8 +114,7 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
           return (...args: any[]) => {
             return transactIfPossible(yarr, () => {
               const len = yarr.length
-              const seen = new WeakSet<object>()
-              const convert = (v: any) => convertJsToYjsValue(v, yarr, seen)
+              const convert = (v: unknown) => convertJsToYjsValue(v)
 
               switch (prop) {
                 case "push": {
@@ -125,7 +124,8 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
                 }
                 case "pop": {
                   if (len === 0) return undefined
-                  const last = convertYjsToJsValue(yarr.get(len - 1))
+                  const val = yarr.get(len - 1)
+                  const last = convertYjsToJsValue(val, true)
                   yarr.delete(len - 1, 1)
                   return last
                 }
@@ -136,7 +136,8 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
                 }
                 case "shift": {
                   if (len === 0) return undefined
-                  const first = convertYjsToJsValue(yarr.get(0))
+                  const val = yarr.get(0)
+                  const first = convertYjsToJsValue(val, true)
                   yarr.delete(0, 1)
                   return first
                 }
@@ -150,12 +151,16 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
                       ? len - actualStart
                       : Math.min(Math.max(deleteCount, 0), len - actualStart)
 
+                  // Convert items BEFORE deleting, in case some items are being moved from the deleted range
+                  // these items will be cloned since at this point they are still parented
+                  const clonedYjsItems = items.map(convert)
+
                   const deleted = yarr
                     .slice(actualStart, actualStart + actualDeleteCount)
-                    .map(convertYjsToJsValue)
+                    .map((val) => convertYjsToJsValue(val, true))
                   yarr.delete(actualStart, actualDeleteCount)
-                  if (items.length > 0) {
-                    yarr.insert(actualStart, items.map(convert))
+                  if (clonedYjsItems.length > 0) {
+                    yarr.insert(actualStart, clonedYjsItems)
                   }
                   return deleted
                 }
@@ -168,10 +173,13 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
 
                   if (actualEnd > actualStart) {
                     yarr.delete(actualStart, actualEnd - actualStart)
-                    yarr.insert(
-                      actualStart,
-                      new Array(actualEnd - actualStart).fill(convert(value))
-                    )
+                    const count = actualEnd - actualStart
+                    const converted = []
+                    for (let i = 0; i < count; i++) {
+                      // We need to convert for each slot because Yjs types cannot be parented multiple times
+                      converted.push(convert(value))
+                    }
+                    yarr.insert(actualStart, converted)
                   }
                   return receiver
                 }
@@ -186,9 +194,8 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
                   const count = Math.min(actualEnd - actualStart, len - actualTarget)
 
                   if (count > 0) {
-                    const values = yarr
-                      .slice(actualStart, actualStart + count)
-                      .map((v) => (v instanceof Y.AbstractType ? v.clone() : v))
+                    // this will clone since the items are still parented
+                    const values = yarr.slice(actualStart, actualStart + count).map(convert)
                     yarr.delete(actualTarget, count)
                     yarr.insert(actualTarget, values)
                   }
@@ -196,10 +203,13 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
                 }
                 case "reverse":
                 case "sort": {
-                  const snap = snapshotArray(yarr)
+                  // will be cloned later
+                  const snap = snapshotArray(yarr, false)
                   Reflect.apply(Reflect.get(Array.prototype, prop), snap, args)
+                  // here they are still parented, so cloning happens
+                  const converted = snap.map(convert)
                   yarr.delete(0, len)
-                  yarr.insert(0, snap.map(convert))
+                  yarr.insert(0, converted)
                   return receiver
                 }
                 default:
@@ -211,8 +221,9 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
 
         const native = Reflect.get(Array.prototype, prop)
         if (typeof native === "function") {
+          // a function that does not mutate the array, such as map, filter, slice, etc.
           return (...args: unknown[]) => {
-            const snap = snapshotArray(yarr)
+            const snap = snapshotArray(yarr, false)
             return Reflect.apply(native, snap, args)
           }
         }
@@ -277,7 +288,7 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
           configurable: true,
           enumerable: true,
           writable: true,
-          value: convertYjsToJsValue(yarr.get(index)),
+          value: convertYjsToJsValue(yarr.get(index), false),
         }
       }
       return undefined

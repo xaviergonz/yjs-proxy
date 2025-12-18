@@ -14,9 +14,8 @@ function setYMapValue(ymap: Y.Map<unknown>, prop: string, value: any): boolean {
     if (unwrapped && unwrapped === current) return true
   }
 
-  const seen = new WeakSet<object>()
-  const converted = convertJsToYjsValue(value, ymap, seen)
   transactIfPossible(ymap, () => {
+    const converted = convertJsToYjsValue(value)
     ymap.set(prop, converted)
   })
   return true
@@ -42,7 +41,7 @@ export function ymapProxy(ymap: Y.Map<unknown>): StringKeyedObject {
       if (prop === "constructor") return undefined
       if (typeof prop === "string" && ymap.has(prop)) {
         const v = ymap.get(prop)
-        return convertYjsToJsValue(v)
+        return convertYjsToJsValue(v, false)
       }
       return undefined
     },
@@ -77,7 +76,7 @@ export function ymapProxy(ymap: Y.Map<unknown>): StringKeyedObject {
           configurable: true,
           enumerable: true,
           writable: true,
-          value: convertYjsToJsValue(ymap.get(prop)),
+          value: convertYjsToJsValue(ymap.get(prop), false),
         }
       }
       return undefined

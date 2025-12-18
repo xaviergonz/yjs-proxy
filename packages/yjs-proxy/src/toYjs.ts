@@ -3,7 +3,7 @@ import { convertJsToYjsValue } from "./conversion"
 import { failure } from "./error/failure"
 import { StringKeyedObject } from "./types"
 import { unwrapYjs } from "./unwrapYjs"
-import { isPlainObject } from "./utils"
+import { isYArray, isYMap } from "./utils"
 
 /**
  * Converts a plain JavaScript value (object, array, primitive) or a `wrapYjs` proxy
@@ -27,21 +27,9 @@ export function toYjs(value: any): Y.Map<unknown> | Y.Array<unknown> {
 
   if (value instanceof Y.Map || value instanceof Y.Array) return value
 
-  if (Array.isArray(value)) {
-    const yarr = new Y.Array<unknown>()
-    const seen = new WeakSet<object>()
-    const converted = value.map((v) => convertJsToYjsValue(v, yarr, seen))
-    yarr.insert(0, converted)
-    return yarr
-  }
-
-  if (isPlainObject(value)) {
-    const ymap = new Y.Map<unknown>()
-    const seen = new WeakSet<object>()
-    for (const [k, v] of Object.entries(value)) {
-      ymap.set(k, convertJsToYjsValue(v, ymap, seen))
-    }
-    return ymap
+  const converted = convertJsToYjsValue(value)
+  if (isYMap(converted) || isYArray(converted)) {
+    return converted
   }
 
   throw failure("Value cannot be converted to a Yjs Map or Array")
