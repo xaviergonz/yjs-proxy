@@ -6,14 +6,13 @@ import { deepFreeze } from "./utils"
  *
  * This is an escape hatch when you explicitly want a raw JSON-ish object value.
  *
- * Note: `markAsJs` returns a deeply frozen shallow clone of the input value.
+ * Note: `markAsJs` deeply freezes the input value.
  * Note: Circular references in raw objects will cause Yjs to crash during synchronization.
  */
 export function markAsJs<T extends object>(value: T): T {
-  const clone = Array.isArray(value) ? [...value] : { ...value }
-  deepFreeze(clone)
-  markedAsJsValues.add(clone)
-  return clone as T
+  deepFreeze(value)
+  markedAsJsValues.add(value)
+  return value
 }
 
 /**

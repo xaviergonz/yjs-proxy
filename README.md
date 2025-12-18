@@ -85,7 +85,7 @@ state.todos[0].done = true
 
 - **Only `Y.Map` and `Y.Array` are proxied.** `wrapYjs` throws if you pass a different type.
 - **Plain objects/arrays become CRDTs.** Assigning `{}` or `[]` recursively becomes nested `Y.Map` / `Y.Array`.
-- **Existing proxies/Yjs types are reused.** Assigning a `wrapYjs` proxy or a `Y.Map`/`Y.Array` keeps the same underlying structure (cloned when necessary).
+- **Existing proxies/Yjs types are integrated.** Assigning a `wrapYjs` proxy or a `Y.Map`/`Y.Array` will reuse the underlying structure if it's not already part of a document or parent; otherwise, it is automatically cloned.
 - **Transactions are automatic when attached to a doc.** If the wrapped type is attached to a `Y.Doc`, mutations are wrapped in `doc.transact()`.
 - **Raw values are supported (and frozen).** You can opt out of CRDT conversion for a specific object/array using `markAsJs`.
 
@@ -152,7 +152,7 @@ Marks a plain object or array to be stored in Yjs as a raw JSON value, rather th
 
 Notes:
 
-- `markAsJs` returns a **deeply frozen** shallow clone of the input value.
+- `markAsJs` returns a **deeply frozen** shallow clone of the input value. Note that because it is a shallow clone, any nested objects/arrays in the original value will also be frozen.
 - Raw objects/arrays retrieved from Yjs are also treated as raw values and **deeply frozen**.
 - Circular references in raw objects are unsafe for Yjs synchronization (avoid cycles).
 
@@ -206,15 +206,15 @@ try {
 `wrapYjs(Y.Array)` aims to feel like a normal JS array, but there are a few important details:
 
 - **Mutating methods are applied to Yjs** in a single transaction when possible: `push`, `pop`, `shift`, `unshift`, `splice`, `sort`, `reverse`, `fill`, `copyWithin`.
-- **Non-mutating methods** (like `map`, `filter`, `slice`, `toSorted`, etc.) operate on a snapshot and return plain JS values.
+- **Non-mutating methods** (like `map`, `filter`, `slice`, `toSorted`, etc.) operate on a snapshot and return a plain JS array (though elements will still be proxies if they are nested `Y.Map` or `Y.Array`).
 - **`undefined` is not representable in Yjs.** When you extend an array by setting `length` or writing past the end, missing entries are filled with `null`.
-- **`delete arr[i]` does not shrink the array.** It replaces the slot with `null` (preserving array length), matching JS “hole” semantics as closely as possible.
+- **`delete arr[i]` does not shrink the array.** It replaces the slot with `null` (preserving array length). Note that `null` is not a true JS "hole", so `i in arr` will still be `true`.
 
 ## Gotchas & limitations
 
 - **Cyclic structures are not supported.** Assigning cyclic plain objects/arrays will throw.
 - **Raw values are immutable (frozen).** Anything stored or returned as a raw object/array is deeply frozen; treat it as read-only.
-- **Only plain objects become `Y.Map`.** Objects that are not plain (e.g. class instances) are stored as-is and won’t become CRDTs.
+- **Only plain objects become `Y.Map`.** Objects that are not plain (e.g. class instances) are stored as raw JSON data. They lose their prototype and methods when retrieved from the shared state.
 - **Prefer plain JSON-ish data.** For shared state, stick to primitives, plain objects, plain arrays, and Yjs types.
 
 ## Contributing

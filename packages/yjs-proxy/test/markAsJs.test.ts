@@ -11,7 +11,7 @@ describe("markAsJs", () => {
     const original = { a: 1, nested: { b: 2 } }
     const raw = markAsJs(original)
 
-    expect(raw).not.toBe(original) // Shallow clone
+    expect(raw).toBe(original)
     expect(raw).toEqual(original)
     expect(Object.isFrozen(raw)).toBe(true)
     expect(Object.isFrozen(raw.nested)).toBe(true)
@@ -30,7 +30,7 @@ describe("markAsJs", () => {
     // Array check
     const originalArr = [1, 2]
     const rawArr = markAsJs(originalArr)
-    expect(rawArr).not.toBe(originalArr)
+    expect(rawArr).toBe(originalArr)
     expect(isMarkedAsJs(rawArr)).toBe(true)
     js.y = rawArr
     expect(js.y).toEqual(originalArr)

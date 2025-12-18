@@ -1,5 +1,6 @@
 # Changelog
 
+- `markAsJs` now freezes the passed object instead of shallow copying it.
 - Several binding fixes.
 
 ## 1.0.1
