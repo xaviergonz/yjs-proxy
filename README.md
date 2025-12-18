@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo.png" height="128" />
+  <img src="./logo.png" height="220" />
   <h1 align="center">yjs-proxy</h1>
 </p>
 <p align="center">
