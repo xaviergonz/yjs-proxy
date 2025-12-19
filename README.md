@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./logo.png" height="220" style="border-radius: 20px;" />
+  <img src="./logo.png" height="220" />
 </p>
 <p align="center">
   <i>The most ergonomic way to work with Yjs. Use shared types as plain JavaScript objects.</i>
