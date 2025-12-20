@@ -351,4 +351,89 @@ describe("stress tests", () => {
       obj.root.b.splice(0, obj.root.b.length, { a: 1 }, { b: 2 }, { c: 3 }, { d: 4 }, { e: 5 })
     })
   })
+
+  test("detached mode lifecycle stress", () => {
+    const doc = new Y.Doc()
+    const root = wrapYjs<any>(doc.getMap())
+
+    // 1. Create a complex detached structure
+    const detached = {
+      arr: [1, { x: 1 }, [2, 3]],
+      map: { a: 1, b: { c: 2 } },
+    }
+    // This will be wrapped in a proxy when assigned
+    root.data = detached
+    const dataProxy = root.data
+    const arrProxy = dataProxy.arr
+    const mapProxy = dataProxy.map
+    const nestedObjProxy = arrProxy[1]
+    const nestedArrProxy = arrProxy[2]
+
+    // 2. Detach it
+    delete root.data
+
+    // Verify it's detached but readable/writable
+    expect(dataProxy.arr[0]).toBe(1)
+    expect(nestedObjProxy.x).toBe(1)
+    expect(nestedArrProxy[0]).toBe(2)
+
+    nestedObjProxy.x = 10
+    nestedArrProxy.push(4)
+    mapProxy.b.c = 20
+
+    // 3. Reattach to a different location
+    root.newData = dataProxy
+
+    expect(root.newData.arr[1].x).toBe(10)
+    expect(root.newData.arr[2]).toEqual([2, 3, 4])
+    expect(root.newData.map.b.c).toBe(20)
+
+    // 4. Move a piece of the reattached structure to another location (detaching it from newData)
+    const subPiece = root.newData.map
+    root.other = subPiece
+    delete root.newData.map
+
+    expect(root.other.b.c).toBe(20)
+    expect(root.newData.map).toBeUndefined()
+
+    // 5. Deep nesting and multiple moves
+    root.deep = { level1: { level2: { level3: [100] } } }
+    const l3 = root.deep.level1.level2.level3
+    const l2 = root.deep.level1.level2
+
+    // Detach l2
+    root.deep.level1.level2 = { replaced: true }
+    expect(l2.level3).toBe(l3)
+    expect(l3[0]).toBe(100)
+
+    l3.push(200)
+    // Reattach l2 elsewhere
+    root.rebound = l2
+    expect(root.rebound.level3[1]).toBe(200)
+
+    // 6. Array stress in detached mode
+    const detachedArr = root.rebound.level3
+    root.rebound.level3 = [] // detach detachedArr
+    detachedArr.reverse()
+    detachedArr.sort((a: number, b: number) => a - b)
+    detachedArr.splice(1, 0, 150)
+    detachedArr.fill(0, 0, 1)
+
+    expect(detachedArr).toEqual([0, 150, 200])
+
+    // Reattach array
+    root.finalArr = detachedArr
+    expect(root.finalArr).toEqual([0, 150, 200])
+
+    // 7. Cross-document move (effectively detaching and reattaching)
+    const doc2 = new Y.Doc()
+    const root2 = wrapYjs<any>(doc2.getMap())
+
+    const pieceToMove = root.finalArr
+    root2.imported = pieceToMove
+    // It should be cloned into doc2
+    expect(root2.imported).toEqual([0, 150, 200])
+    root2.imported.push(300)
+    expect(root.finalArr).toEqual([0, 150, 200]) // original doc unchanged
+  })
 })
