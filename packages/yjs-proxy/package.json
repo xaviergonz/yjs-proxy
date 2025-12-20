@@ -58,7 +58,7 @@
   "scripts": {
     "quick-build": "tsc",
     "quick-build-tests": "tsc -p test",
-    "copy-root-files": "shx cp ../../README.md . && shx cp ../../LICENSE . && shx cp ../../CHANGELOG.md .",
+    "copy-root-files": "shx cp ../../README.md . && shx cp ../../LICENSE . && shx cp ../../CHANGELOG.md . && shx cp ../../logo.png .",
     "build": "pnpm quick-build && pnpm copy-root-files && shx rm -rf dist && vite build && shx cp dist/yjs-proxy.esm.mjs dist/yjs-proxy.esm.js",
     "test": "vitest run",
     "test:ci": "vitest run --coverage",
