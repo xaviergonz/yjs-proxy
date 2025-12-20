@@ -1,18 +1,17 @@
-import { failure } from "./error/failure"
-import { unwrapYjs } from "./unwrapYjs"
+import rfdc from "rfdc"
+import { getProxyState } from "./cache"
+
+const clone = rfdc()
 
 /**
  * Converts a `wrapYjs` proxy into a plain JSON-compatible object or array.
  *
- * This calls the `toJSON()` method of the underlying Yjs type.
+ * This calls the `toJSON()` method of the underlying Y.js value.
  *
  * @param proxy The `wrapYjs` proxy to convert.
  * @returns A plain JSON-compatible object or array.
  */
-export function yjsWrapperToJson<T>(proxy: T): T {
-  const yType = unwrapYjs(proxy)
-  if (!yType) {
-    throw failure("yjsWrapperToJson only supports wrapYjs proxies")
-  }
-  return yType.toJSON() as T
+export function yjsWrapperToJson<T extends object>(proxy: T): T {
+  const state = getProxyState(proxy)
+  return !state.attached ? (clone(state.json) as T) : (state.yjsValue.toJSON() as T)
 }

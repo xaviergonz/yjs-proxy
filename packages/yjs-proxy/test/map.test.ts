@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { toYjs, wrapYjs } from "../src/index"
+import { toYjsProxy, unwrapYjs, wrapYjs } from "../src"
 
 describe("wrapYjs (Y.Map)", () => {
   test("basic CRUD operations", () => {
@@ -37,12 +37,12 @@ describe("wrapYjs (Y.Map)", () => {
     // Nested object
     js.obj = { a: 1 }
     expect(js.obj.a).toBe(1)
-    expect(toYjs(js.obj)).toBeInstanceOf(Y.Map)
+    expect(unwrapYjs(js.obj)).toBeInstanceOf(Y.Map)
 
     // Nested array
     js.list = [1, 2]
     expect(js.list).toEqual([1, 2])
-    expect(toYjs(js.list)).toBeInstanceOf(Y.Array)
+    expect(unwrapYjs(js.list)).toBeInstanceOf(Y.Array)
 
     js.list.push(3)
     expect(js.list).toEqual([1, 2, 3])
@@ -63,8 +63,8 @@ describe("wrapYjs (Y.Map)", () => {
     expect(js.x.a).toBe(1)
     expect(js.y.a).toBe(2)
 
-    const xY = toYjs(js.x)
-    const yY = toYjs(js.y)
+    const xY = unwrapYjs(js.x)
+    const yY = unwrapYjs(js.y)
     expect(xY).toBeInstanceOf(Y.Map)
     expect(yY).toBeInstanceOf(Y.Map)
     expect(xY).not.toBe(yY)
@@ -241,7 +241,7 @@ describe("wrapYjs (Y.Map)", () => {
     }).toThrow("Cyclic objects are not supported")
   })
 
-  test("wrapYjs returns the same proxy for the same Yjs type", () => {
+  test("wrapYjs returns the same proxy for the same Y.js value", () => {
     const doc = new Y.Doc()
     const ymap = doc.getMap("m")
     const p1 = wrapYjs(ymap)
@@ -249,7 +249,7 @@ describe("wrapYjs (Y.Map)", () => {
     expect(p1).toBe(p2)
   })
 
-  test("assigning a proxy to another proxy clones the underlying Yjs type", () => {
+  test("assigning a proxy to another proxy clones the underlying Y.js value", () => {
     const doc = new Y.Doc()
     const ymap1 = doc.getMap("m1")
     const ymap2 = doc.getMap("m2")
@@ -530,6 +530,27 @@ describe("wrapYjs (Y.Map)", () => {
     const source = { [sym]: 1 }
     expect(() => {
       Object.assign(js, source)
+    }).toThrow()
+  })
+
+  test("detached mode: deleteProperty and defineProperty", () => {
+    const map = toYjsProxy({ a: 1, b: 2 }) as any
+
+    // deleteProperty
+    delete map.a
+    expect(map.a).toBeUndefined()
+    expect("a" in map).toBe(false)
+
+    // deleteProperty with non-string key
+    const sym = Symbol("test")
+    expect(delete map[sym]).toBe(true)
+
+    // ownKeys
+    expect(Object.keys(map)).toEqual(["b"])
+
+    // defineProperty with non-string key
+    expect(() => {
+      Object.defineProperty(map, sym, { value: 1 })
     }).toThrow()
   })
 })

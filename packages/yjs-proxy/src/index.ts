@@ -1,6 +1,8 @@
+export { isYjsProxy } from "./cache"
 export { YjsProxyError } from "./error/YjsProxyError"
 export { isMarkedAsJs, markAsJs } from "./markAsJs"
 export { toYjs } from "./toYjs"
+export { toYjsProxy } from "./toYjsProxy"
 export type { StringKeyedObject } from "./types"
 export { unwrapYjs } from "./unwrapYjs"
 export { wrapYjs } from "./wrapYjs"

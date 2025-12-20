@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { toYjs, wrapYjs } from "../src/index"
+import { toYjsProxy, unwrapYjs, wrapYjs } from "../src"
 
 describe("wrapYjs (Y.Array)", () => {
   test("index assignment, length, push/pop", () => {
@@ -76,8 +76,8 @@ describe("wrapYjs (Y.Array)", () => {
     expect(js[0].a).toBe(1)
     expect(js[1].a).toBe(2)
 
-    const y0 = toYjs(js[0])
-    const y1 = toYjs(js[1])
+    const y0 = unwrapYjs(js[0])
+    const y1 = unwrapYjs(js[1])
     expect(y0).toBeInstanceOf(Y.Map)
     expect(y1).toBeInstanceOf(Y.Map)
     expect(y0).not.toBe(y1)
@@ -154,6 +154,24 @@ describe("wrapYjs (Y.Array)", () => {
     expect(yarr.length).toBe(0)
   })
 
+  test("pop and shift on empty array", () => {
+    const doc = new Y.Doc()
+    const yarr = doc.getArray("a")
+    const js = wrapYjs<number[]>(yarr)
+
+    expect(js.pop()).toBeUndefined()
+    expect(js.shift()).toBeUndefined()
+  })
+
+  test("delete on detached array", () => {
+    const js = toYjsProxy<any[]>([1, 2])
+    delete js[0]
+    expect(js[0]).toBeNull()
+
+    delete js[10] // out of bounds
+    expect(js.length).toBe(2)
+  })
+
   test("no-op index assignment and deletion", () => {
     const doc = new Y.Doc()
     const yarr = doc.getArray("a")
@@ -196,6 +214,13 @@ describe("wrapYjs (Y.Array)", () => {
     expect(js[1]).toBe(null)
     expect(js.length).toBe(3)
     expect(yarr.get(1)).toBe(null)
+  })
+
+  test("deleteProperty in detached mode", () => {
+    const js = toYjsProxy([1, 2, 3])
+    delete js[1]
+    expect(js[1]).toBe(null)
+    expect(js.length).toBe(3)
   })
 
   test("iterator and ownKeys", () => {
@@ -455,7 +480,7 @@ describe("wrapYjs (Y.Array)", () => {
     }).toThrow("Cyclic objects are not supported")
   })
 
-  test("wrapYjs returns the same proxy for the same Yjs type", () => {
+  test("wrapYjs returns the same proxy for the same Y.js value", () => {
     const doc = new Y.Doc()
     const yarr = doc.getArray("a")
     const p1 = wrapYjs(yarr)
@@ -463,7 +488,7 @@ describe("wrapYjs (Y.Array)", () => {
     expect(p1).toBe(p2)
   })
 
-  test("assigning a proxy to another proxy clones the underlying Yjs type", () => {
+  test("assigning a proxy to another proxy clones the underlying Y.js value", () => {
     const doc = new Y.Doc()
     const yarr1 = doc.getArray("a1")
     const yarr2 = doc.getArray("a2")
@@ -608,6 +633,74 @@ describe("wrapYjs (Y.Array)", () => {
     expect(outDesc).toBeUndefined()
   })
 
+  test("Object.defineProperty validation", () => {
+    const doc = new Y.Doc()
+    const yarr = doc.getArray("a")
+    const js = wrapYjs<any[]>(yarr)
+
+    // length must be non-configurable and non-enumerable
+    expect(() => {
+      Object.defineProperty(js, "length", {
+        value: 10,
+        configurable: true,
+      })
+    }).toThrow()
+
+    expect(() => {
+      Object.defineProperty(js, "length", {
+        value: 10,
+        enumerable: true,
+      })
+    }).toThrow()
+
+    expect(() => {
+      Object.defineProperty(js, "length", {
+        value: 10,
+        writable: false,
+      })
+    }).toThrow()
+
+    // This should work (matching defaults for length)
+    Object.defineProperty(js, "length", {
+      value: 5,
+      configurable: false,
+      enumerable: false,
+      writable: true,
+    })
+    expect(js.length).toBe(5)
+
+    // indices must be configurable, enumerable and writable
+    expect(() => {
+      Object.defineProperty(js, "0", {
+        value: 1,
+        configurable: false,
+      })
+    }).toThrow()
+
+    expect(() => {
+      Object.defineProperty(js, "0", {
+        value: 1,
+        enumerable: false,
+      })
+    }).toThrow()
+
+    expect(() => {
+      Object.defineProperty(js, "0", {
+        value: 1,
+        writable: false,
+      })
+    }).toThrow()
+
+    // This should work
+    Object.defineProperty(js, "0", {
+      value: 100,
+      configurable: true,
+      enumerable: true,
+      writable: true,
+    })
+    expect(js[0]).toBe(100)
+  })
+
   test("Object.defineProperty with non-value descriptors", () => {
     const doc = new Y.Doc()
     const yarr = doc.getArray("a")
@@ -657,5 +750,70 @@ describe("wrapYjs (Y.Array)", () => {
     expect(js[0]).toBeInstanceOf(Uint8Array)
     expect(Array.from(js[0])).toEqual([1, 2, 3])
     expect(yarr.get(0)).toBeInstanceOf(Uint8Array)
+  })
+
+  test("set length to invalid value throws RangeError", () => {
+    const doc = new Y.Doc()
+    const yarr = doc.getArray("a")
+    const js = wrapYjs<number[]>(yarr)
+    expect(() => {
+      js.length = -1
+    }).toThrow(RangeError)
+    expect(() => {
+      js.length = Number.NaN
+    }).toThrow(RangeError)
+  })
+
+  test("detached mode: iterator, non-index get/set, deleteProperty", () => {
+    const arr = toYjsProxy([1, 2, 3]) as any
+
+    // iterator
+    const values = []
+    for (const v of arr) {
+      values.push(v)
+    }
+    expect(values).toEqual([1, 2, 3])
+
+    // non-index get/set
+    expect(() => {
+      arr.someProp = "hello"
+    }).toThrow("Arrays do not support custom properties")
+    expect(arr.someProp).toBeUndefined()
+    expect("someProp" in arr).toBe(false)
+    expect(1 in arr).toBe(true)
+    expect(5 in arr).toBe(false)
+
+    // deleteProperty
+    expect(delete arr.someProp).toBe(true)
+  })
+
+  test("defineProperty with getter/setter throws", () => {
+    const arr = toYjsProxy([1, 2, 3])
+    expect(() => {
+      Object.defineProperty(arr, "0", {
+        get() {
+          return 1
+        },
+      })
+    }).toThrow()
+  })
+
+  test("getOwnPropertyDescriptor for non-existent property", () => {
+    const arr = toYjsProxy([1, 2, 3])
+    expect(Object.getOwnPropertyDescriptor(arr, "someProp")).toBeUndefined()
+  })
+
+  test("defineProperty for non-index property returns false", () => {
+    const arr = toYjsProxy([1, 2, 3])
+    expect(() => {
+      Object.defineProperty(arr, "someProp", { value: 1 })
+    }).toThrow() // In strict mode, returning false from defineProperty trap throws TypeError
+  })
+
+  test("attached mode: deleteProperty on non-index returns true", () => {
+    const doc = new Y.Doc()
+    const yarr = doc.getArray("a")
+    const js = wrapYjs<any>(yarr)
+    expect(delete js.someProp).toBe(true)
   })
 })

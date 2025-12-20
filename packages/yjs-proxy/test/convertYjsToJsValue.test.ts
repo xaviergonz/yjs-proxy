@@ -2,8 +2,8 @@ import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
 import { convertYjsToJsValue } from "../src/conversion"
 
-describe("deleted types", () => {
-  test("convertYjsToJsValue throws on deleted types", () => {
+describe("convertYjsToJsValue", () => {
+  test("throws on deleted types", () => {
     const doc = new Y.Doc()
     const ymap = doc.getMap("m")
     ymap.set("a", new Y.Map([["x", 1]]))
@@ -11,14 +11,14 @@ describe("deleted types", () => {
     ymap.delete("a")
 
     // Now 'sub' is deleted.
-    expect(() => convertYjsToJsValue(sub, false)).toThrow("Cannot wrap a deleted Yjs type")
+    expect(() => convertYjsToJsValue(sub)).toThrow("Cannot wrap a deleted Y.js value")
   })
 
-  test("convertYjsToJsValue throws on destroyed docs", () => {
+  test("throws on destroyed docs", () => {
     const doc = new Y.Doc()
     const ymap = doc.getMap("m")
     doc.destroy()
 
-    expect(() => convertYjsToJsValue(ymap, false)).toThrow("Cannot wrap a deleted Yjs type")
+    expect(() => convertYjsToJsValue(ymap)).toThrow("Cannot wrap a deleted Y.js value")
   })
 })

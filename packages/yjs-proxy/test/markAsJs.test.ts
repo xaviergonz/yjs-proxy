@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { isMarkedAsJs, markAsJs, unwrapYjs, wrapYjs } from "../src/index"
+import { isMarkedAsJs, isYjsProxy, markAsJs, wrapYjs } from "../src/index"
 
 describe("markAsJs", () => {
   test("stores raw JS object/array and deep freezes it", () => {
@@ -21,7 +21,7 @@ describe("markAsJs", () => {
     expect(js.x).toEqual(original)
     expect(isMarkedAsJs(js.x)).toBe(true)
     expect(Object.isFrozen(js.x)).toBe(true)
-    expect(unwrapYjs(js.x.nested)).toBeUndefined()
+    expect(isYjsProxy(js.x.nested)).toBe(false)
 
     const stored = ymap.get("x")
     expect(stored).not.toBeInstanceOf(Y.Map)

@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.0
+
+- Proxies can now be in attached or detached mode. In attached mode the proxies back an active Y.js value, while in detached mode they back a plain JS object/array. This is because Y.js values can be written, but they cannot be read / transformed to JSON while detached.
+
 ## 1.0.4
 
 - Updated readme.

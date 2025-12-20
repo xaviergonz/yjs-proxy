@@ -79,6 +79,7 @@
     "yjs": "^13.0.0"
   },
   "dependencies": {
+    "rfdc": "^1.4.1",
     "tslib": "^2.8.1"
   },
   "directories": {

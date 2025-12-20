@@ -1,12 +1,13 @@
 import * as Y from "yjs"
-import { proxyToYjsCache, yjsToProxyCache } from "./cache"
+import { dataToProxyCache, ProxyState, setProxyState, tryGetProxyState } from "./cache"
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
+import { detachProxyOfYjsValue } from "./detachProxyOfYjsValue"
 import { failure } from "./error/failure"
-import { unwrapYjs } from "./unwrapYjs"
-import { transactIfPossible } from "./utils"
+import { tryUnwrapJson, tryUnwrapYjs, unwrapYjs } from "./unwrapYjs"
+import { isObjectLike, transactIfPossible } from "./utils"
 
-function snapshotArray(yarr: Y.Array<unknown>, clone: boolean): unknown[] {
-  return Array.from(yarr, (v) => convertYjsToJsValue(v, clone))
+function snapshotArray(yarr: Y.Array<unknown>): unknown[] {
+  return Array.from(yarr, (v) => convertYjsToJsValue(v))
 }
 
 function parseArrayIndex(prop: PropertyKey): number | undefined {
@@ -44,6 +45,10 @@ function setYArrayLength(yarr: Y.Array<unknown>, value: any): boolean {
 
   transactIfPossible(yarr, () => {
     if (newLen < yarr.length) {
+      // detach removed items
+      for (let i = newLen; i < yarr.length; i++) {
+        detachProxyOfYjsValue(yarr.get(i))
+      }
       yarr.delete(newLen, yarr.length - newLen)
     } else if (newLen > yarr.length) {
       const diff = newLen - yarr.length
@@ -54,17 +59,25 @@ function setYArrayLength(yarr: Y.Array<unknown>, value: any): boolean {
   return true
 }
 
-function setYArrayIndex(yarr: Y.Array<unknown>, index: number, value: any): boolean {
-  const current = index < yarr.length ? yarr.get(index) : undefined
-  if (current === value && value !== undefined) return true
+function setJsonArrayIndex(json: any[], index: number, value: any): boolean {
+  // We unwrap proxies to their raw data to keep the JSON tree "pure".
+  // See the architectural note in cache.ts.
+  json[index] = tryUnwrapJson(value) ?? value
+  return true
+}
 
-  const unwrapped = unwrapYjs(value)
-  if (unwrapped && unwrapped === current) return true
+function setYArrayIndex(yarr: Y.Array<unknown>, index: number, value: any): boolean {
+  const currentYjsValue = index < yarr.length ? yarr.get(index) : undefined
+  if (currentYjsValue === value && value !== undefined) return true
+
+  const newYjsValue = tryUnwrapYjs(value)
+  if (newYjsValue && newYjsValue === currentYjsValue) return true
 
   transactIfPossible(yarr, () => {
     const converted = convertJsToYjsValue(value)
 
     if (index < yarr.length) {
+      detachProxyOfYjsValue(yarr.get(index))
       yarr.delete(index, 1)
       yarr.insert(index, [converted])
     } else {
@@ -79,11 +92,30 @@ function setYArrayIndex(yarr: Y.Array<unknown>, index: number, value: any): bool
   return true
 }
 
+/**
+ * Creates a proxy for a Y.Array.
+ *
+ * @param yarr The Y.Array to wrap.
+ * @returns A proxy for the Y.Array.
+ * @internal
+ */
 export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
-  const cached = yjsToProxyCache.get(yarr)
-  if (cached) return cached as unknown[]
+  return createYArrayProxy({ attached: true, yjsValue: yarr })
+}
 
-  const proxy = new Proxy<unknown[]>([], {
+/**
+ * Creates a proxy for a Y.Array or a JSON array.
+ *
+ * @param state The initial state of the proxy.
+ * @returns A proxy for the array.
+ * @internal
+ */
+export function createYArrayProxy(state: ProxyState<any>): any[] {
+  const key = state.attached ? state.yjsValue : state.json
+  const cached = dataToProxyCache.get(key)
+  if (cached) return cached as any[]
+
+  const proxy: any[] = new Proxy<any[]>([], {
     getPrototypeOf() {
       return Array.prototype
     },
@@ -95,53 +127,88 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
     },
     get(_target, prop, receiver) {
       if (prop === Symbol.toStringTag) return "Array"
+      if (prop === "constructor") return Array
+
+      const state = tryGetProxyState<any[]>(proxy)!
+      if (!state.attached) {
+        // detached mode
+        const json = state.json
+        if (prop === Symbol.iterator) {
+          return function* iterator() {
+            for (const v of json) {
+              yield dataToProxyCache.get(v) ?? v
+            }
+          }
+        }
+        if (prop === "length") return json.length
+        const index = parseArrayIndex(prop)
+        if (index !== undefined) {
+          const v = json[index]
+          return dataToProxyCache.get(v) ?? v
+        }
+
+        const native = (Array.prototype as any)[prop]
+        if (typeof native === "function") {
+          return (...args: unknown[]) => Reflect.apply(native, proxy, args)
+        }
+        return undefined
+      }
+
+      // attached mode
+      const currentYArr = state.yjsValue as Y.Array<any>
       if (prop === Symbol.iterator) {
         return function* iterator() {
-          for (const v of yarr) {
-            yield convertYjsToJsValue(v, false)
+          for (const v of currentYArr) {
+            yield convertYjsToJsValue(v)
           }
         }
       }
-      if (prop === "length") return yarr.length
+
+      if (prop === "length") return currentYArr.length
+
       const index = parseArrayIndex(prop)
       if (index !== undefined) {
-        return convertYjsToJsValue(yarr.get(index), false)
+        return convertYjsToJsValue(currentYArr.get(index))
       }
 
       if (typeof prop === "string") {
-        if (prop === "constructor") return Array
-
         if (isMutatingArrayMethod(prop)) {
           return (...args: any[]) => {
-            return transactIfPossible(yarr, () => {
-              const len = yarr.length
+            return transactIfPossible(currentYArr, () => {
+              const len = currentYArr.length
               const convert = (v: unknown) => convertJsToYjsValue(v)
 
               switch (prop) {
                 case "push": {
-                  const converted = args.map(convert)
-                  yarr.insert(len, converted)
-                  return yarr.length
+                  const yjsValuesToPush = args.map(convert)
+                  currentYArr.insert(len, yjsValuesToPush)
+                  return currentYArr.length
                 }
+
                 case "pop": {
                   if (len === 0) return undefined
-                  const val = yarr.get(len - 1)
-                  const last = convertYjsToJsValue(val, true)
-                  yarr.delete(len - 1, 1)
-                  return last
+                  const lastYjsValue = currentYArr.get(len - 1)
+                  detachProxyOfYjsValue(lastYjsValue)
+                  const lastJsValue = convertYjsToJsValue(lastYjsValue)
+                  currentYArr.delete(len - 1, 1)
+                  return lastJsValue
                 }
+
                 case "unshift": {
-                  const converted = args.map(convert)
-                  yarr.insert(0, converted)
-                  return yarr.length
+                  const yjsValuesToUnshift = args.map(convert)
+                  currentYArr.insert(0, yjsValuesToUnshift)
+                  return currentYArr.length
                 }
+
                 case "shift": {
                   if (len === 0) return undefined
-                  const val = yarr.get(0)
-                  const first = convertYjsToJsValue(val, true)
-                  yarr.delete(0, 1)
-                  return first
+                  const firstYjsValue = currentYArr.get(0)
+                  detachProxyOfYjsValue(firstYjsValue)
+                  const firstJsValue = convertYjsToJsValue(firstYjsValue)
+                  currentYArr.delete(0, 1)
+                  return firstJsValue
                 }
+
                 case "splice": {
                   const start = args[0]
                   const deleteCount = args[1]
@@ -156,34 +223,45 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
                   // these items will be cloned since at this point they are still parented
                   const clonedYjsItems = items.map(convert)
 
-                  const deleted = yarr
-                    .slice(actualStart, actualStart + actualDeleteCount)
-                    .map((val) => convertYjsToJsValue(val, true))
-                  yarr.delete(actualStart, actualDeleteCount)
-                  if (clonedYjsItems.length > 0) {
-                    yarr.insert(actualStart, clonedYjsItems)
+                  const deletedYjsValues = currentYArr.slice(
+                    actualStart,
+                    actualStart + actualDeleteCount
+                  )
+                  for (const yjsValue of deletedYjsValues) {
+                    detachProxyOfYjsValue(yjsValue)
                   }
-                  return deleted
+
+                  const deletedJsValues = deletedYjsValues.map((val) => convertYjsToJsValue(val))
+                  currentYArr.delete(actualStart, actualDeleteCount)
+                  if (clonedYjsItems.length > 0) {
+                    currentYArr.insert(actualStart, clonedYjsItems)
+                  }
+                  return deletedJsValues
                 }
+
                 case "fill": {
-                  const value = args[0]
+                  const fillValue = args[0]
                   const start = args[1] ?? 0
                   const end = args[2] ?? len
                   const actualStart = start < 0 ? Math.max(len + start, 0) : Math.min(start, len)
                   const actualEnd = end < 0 ? Math.max(len + end, 0) : Math.min(end, len)
 
                   if (actualEnd > actualStart) {
-                    yarr.delete(actualStart, actualEnd - actualStart)
-                    const count = actualEnd - actualStart
-                    const converted = []
-                    for (let i = 0; i < count; i++) {
-                      // We need to convert for each slot because Yjs types cannot be parented multiple times
-                      converted.push(convert(value))
+                    for (let i = actualStart; i < actualEnd; i++) {
+                      detachProxyOfYjsValue(currentYArr.get(i))
                     }
-                    yarr.insert(actualStart, converted)
+                    currentYArr.delete(actualStart, actualEnd - actualStart)
+                    const count = actualEnd - actualStart
+                    const yjsValuesToAdd = []
+                    for (let i = 0; i < count; i++) {
+                      // We need to convert for each slot because Y.js values cannot be parented multiple times
+                      yjsValuesToAdd.push(convert(fillValue))
+                    }
+                    currentYArr.insert(actualStart, yjsValuesToAdd)
                   }
                   return receiver
                 }
+
                 case "copyWithin": {
                   const target = args[0]
                   const start = args[1] ?? 0
@@ -195,24 +273,34 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
                   const count = Math.min(actualEnd - actualStart, len - actualTarget)
 
                   if (count > 0) {
+                    for (let i = actualTarget; i < actualTarget + count; i++) {
+                      detachProxyOfYjsValue(currentYArr.get(i))
+                    }
                     // this will clone since the items are still parented
-                    const values = yarr.slice(actualStart, actualStart + count).map(convert)
-                    yarr.delete(actualTarget, count)
-                    yarr.insert(actualTarget, values)
+                    const yjsValues = currentYArr
+                      .slice(actualStart, actualStart + count)
+                      .map((v) => (v instanceof Y.AbstractType ? v.clone() : v))
+                    currentYArr.delete(actualTarget, count)
+                    currentYArr.insert(actualTarget, yjsValues)
                   }
                   return receiver
                 }
+
                 case "reverse":
                 case "sort": {
-                  // will be cloned later
-                  const snap = snapshotArray(yarr, false)
-                  Reflect.apply(Reflect.get(Array.prototype, prop), snap, args)
-                  // here they are still parented, so cloning happens
-                  const converted = snap.map(convert)
-                  yarr.delete(0, len)
-                  yarr.insert(0, converted)
+                  // snap is a collection of proxy-wrapped objects + primitive values
+                  const snap = snapshotArray(currentYArr)
+                  Reflect.apply(Array.prototype[prop], snap, args)
+                  const converted = snap.map((v) => (isObjectLike(v) ? unwrapYjs(v)!.clone() : v))
+                  for (let i = 0; i < currentYArr.length; i++) {
+                    detachProxyOfYjsValue(currentYArr.get(i))
+                  }
+                  currentYArr.delete(0, len)
+                  currentYArr.insert(0, converted)
                   return receiver
                 }
+
+                /* v8 ignore next 2 */
                 default:
                   return undefined
               }
@@ -220,57 +308,82 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
           }
         }
 
-        const native = Reflect.get(Array.prototype, prop)
+        const native = (Array.prototype as any)[prop]
         if (typeof native === "function") {
           // a function that does not mutate the array, such as map, filter, slice, etc.
-          return (...args: unknown[]) => {
-            const snap = snapshotArray(yarr, false)
-            return Reflect.apply(native, snap, args)
-          }
+          return (...args: unknown[]) => Reflect.apply(native, proxy, args)
         }
       }
 
       return undefined
     },
     set(_target, prop, value) {
+      const state = tryGetProxyState<any[]>(proxy)!
       if (prop === "length") {
-        return setYArrayLength(yarr, value)
+        if (!state.attached) {
+          state.json.length = value
+          return true
+        }
+        return setYArrayLength(state.yjsValue as Y.Array<any>, value)
       }
 
       const index = parseArrayIndex(prop)
       if (index !== undefined) {
-        return setYArrayIndex(yarr, index, value)
+        if (!state.attached) {
+          return setJsonArrayIndex(state.json, index, value)
+        }
+        return setYArrayIndex(state.yjsValue as Y.Array<any>, index, value)
       }
+
       throw failure(`Arrays do not support custom properties: ${String(prop)}`)
     },
     deleteProperty(_target, prop) {
+      const state = tryGetProxyState<any[]>(proxy)!
       const index = parseArrayIndex(prop)
       if (index === undefined) {
         return true
       }
-      if (index >= yarr.length) return true
-      if (yarr.get(index) === null) {
+
+      if (!state.attached) {
+        // detached mode
+        if (index < state.json.length) {
+          state.json[index] = null
+        }
+        return true
+      }
+
+      // attached mode
+      const currentYArr = state.yjsValue as Y.Array<any>
+      if (index >= currentYArr.length) return true
+      if (currentYArr.get(index) === null) {
         // No change needed
         return true
       }
 
-      transactIfPossible(yarr, () => {
-        yarr.delete(index, 1)
+      detachProxyOfYjsValue(currentYArr.get(index))
+      transactIfPossible(currentYArr, () => {
+        currentYArr.delete(index, 1)
         // JS fills with undefined, but Yjs cannot store undefined values, so we use null
-        yarr.insert(index, [null])
+        currentYArr.insert(index, [null])
       })
       return true
     },
-    has(_target, prop) {
+    has(target, prop) {
       if (prop === "length") return true
+
       const index = parseArrayIndex(prop)
-      if (index !== undefined) return index < yarr.length
-      return Reflect.has(_target, prop)
+
+      const state = tryGetProxyState<any[]>(proxy)!
+      if (index !== undefined) {
+        const len = !state.attached ? state.json.length : (state.yjsValue as Y.Array<any>).length
+        return index < len
+      }
+
+      return Reflect.has(target, prop)
     },
     ownKeys() {
-      const keys: string[] = []
-      for (let i = 0; i < yarr.length; i++) keys.push(String(i))
-      keys.push("length")
+      const keys: string[] = ["length"]
+      for (let i = 0; i < proxy.length; i++) keys.push(String(i))
       return keys
     },
     getOwnPropertyDescriptor(_target, prop) {
@@ -279,40 +392,57 @@ export function yarrayProxy(yarr: Y.Array<unknown>): unknown[] {
           configurable: false,
           enumerable: false,
           writable: true,
-          value: yarr.length,
+          value: proxy.length,
         }
       }
+
       const index = parseArrayIndex(prop)
+
       if (index !== undefined) {
-        if (index >= yarr.length) return undefined
+        if (index >= proxy.length) return undefined
         return {
           configurable: true,
           enumerable: true,
           writable: true,
-          value: convertYjsToJsValue(yarr.get(index), false),
+          value: proxy[index],
         }
       }
       return undefined
     },
-    defineProperty(_target, prop, descriptor) {
-      if (prop === "length") {
-        if (descriptor.value !== undefined) {
-          return setYArrayLength(yarr, descriptor.value)
-        }
+    defineProperty(_target, prop, descriptor): boolean {
+      if (descriptor.get || descriptor.set) {
         return false
       }
+
+      if (prop === "length") {
+        if (
+          descriptor.configurable === true ||
+          descriptor.enumerable === true ||
+          descriptor.writable === false
+        ) {
+          return false
+        }
+        proxy.length = descriptor.value
+        return true
+      }
+
       const index = parseArrayIndex(prop)
       if (index !== undefined) {
-        if (descriptor.value !== undefined) {
-          return setYArrayIndex(yarr, index, descriptor.value)
+        if (
+          descriptor.configurable === false ||
+          descriptor.enumerable === false ||
+          descriptor.writable === false
+        ) {
+          return false
         }
-        return false
+        proxy[index] = descriptor.value
+        return true
       }
       return false
     },
   })
 
-  yjsToProxyCache.set(yarr, proxy)
-  proxyToYjsCache.set(proxy, yarr)
+  dataToProxyCache.set(key, proxy)
+  setProxyState(proxy, state)
   return proxy
 }

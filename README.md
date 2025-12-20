@@ -28,18 +28,16 @@
 
 Working with Yjs `Y.Map` and `Y.Array` can be verbose, especially with nested structures. You have to manually use `.set()`, `.get()`, and wrap everything in transactions.
 
-`yjs-proxy` lets you interact with Yjs types using **standard JavaScript syntax**.
+`yjs-proxy` lets you interact with Y.js values using **standard JavaScript syntax**.
 
 ### Before (Vanilla Yjs)
 
 ```ts
 const ymap = doc.getMap("state")
-doc.transact(() => {
-  ymap.set("count", 1)
-  const todos = new Y.Array()
-  todos.insert(0, [new Y.Map([["text", "buy milk"], ["done", false]])])
-  ymap.set("todos", todos)
-})
+ymap.set("count", 1)
+const todos = new Y.Array()
+todos.insert(0, [new Y.Map([["text", "buy milk"], ["done", false]])])
+ymap.set("todos", todos)
 const text = ymap.get("todos").get(0).get("text")
 ```
 
@@ -111,20 +109,23 @@ state.todos[0].done = true
 
 - **Only `Y.Map` and `Y.Array` are proxied.** `wrapYjs` throws if you pass a different type.
 - **Plain objects/arrays become CRDTs.** Assigning `{}` or `[]` recursively becomes nested `Y.Map` / `Y.Array`.
-- **Existing proxies/Yjs types are integrated.** Assigning a `wrapYjs` proxy or a `Y.Map`/`Y.Array` will reuse the underlying structure if it's not already part of a document or parent; otherwise, it is automatically cloned.
-- **Transactions are automatic when attached to a doc.** If the wrapped type is attached to a `Y.Doc`, mutations are wrapped in `doc.transact()`.
+- **Existing proxies/Y.js values are integrated.** Assigning a `wrapYjs` proxy or a `Y.Map`/`Y.Array` will reuse the underlying structure if it's not already part of a document or parent; otherwise, it is automatically cloned.
+- **Attached vs Detached mode.** A proxy can be in one of two states:
+  - **Attached**: The proxy is linked to a `Y.Doc`. Mutations are automatically wrapped in `doc.transact()` and synced with other clients.
+  - **Detached**: The proxy is not linked to a document (e.g., it was just created via `toYjsProxy` or its property was deleted from an attached parent). It operates on a local JSON representation.
+- **Seamless Transitions.** When a detached proxy is assigned to an attached one, it automatically "attaches" and syncs its local changes to the document. Conversely, when a property is removed from a document, its proxy becomes "detached" but remains fully functional, preserving its state and identity.
 - **Raw values are supported (and frozen).** You can opt out of CRDT conversion for a specific object/array using `markAsJs`.
 
 ## API reference
 
 This section documents the public exports from `yjs-proxy`.
 
-### `wrapYjs(yType)`
+### `wrapYjs(yjsValue)`
 
 Wraps a `Y.Map` or `Y.Array` in a Proxy that behaves like a plain JS object or array.
 
 - Reads return proxied nested `Y.Map`/`Y.Array` values.
-- Writes convert plain objects/arrays into nested Yjs types.
+- Writes convert plain objects/arrays into nested Y.js values.
 - Mutations run inside a Yjs transaction when possible.
 
 ```typescript
@@ -147,29 +148,62 @@ console.log(js.nested.b) // "hello"
 delete js.a
 ```
 
+### `toYjsProxy(value, options?)`
+
+Converts a plain JS object or array into a `yjs-proxy` proxy that starts in **detached mode**.
+
+This is useful for creating state that you intend to attach to a document later, while benefiting from the proxy API immediately.
+
+Options:
+
+- `clone` (boolean, default `true`): If `true`, the input value is deep cloned. If `false`, the input value is used as the initial JSON data, meaning mutations to the proxy while detached will affect the original object.
+
+```typescript
+import { toYjsProxy, wrapYjs } from "yjs-proxy"
+
+const state = toYjsProxy({ count: 0 })
+state.count++ // Works in detached mode
+
+const doc = new Y.Doc()
+const root = wrapYjs(doc.getMap())
+root.state = state // Automatically attaches and syncs
+```
+
 ### `toYjs(value)`
 
-Converts a plain JS object/array into a Yjs-backed structure, or unwraps an existing proxy back to its underlying Yjs type.
+Converts a plain JavaScript value (object, array, primitive) into its corresponding Y.js value.
 
-- `toYjs(wrapYjsProxy)` returns the underlying `Y.Map` / `Y.Array`.
 - `toYjs(plainObject)` returns a new `Y.Map`.
 - `toYjs(plainArray)` returns a new `Y.Array`.
+- If the value is already a Y.js value or a `yjs-proxy` proxy, it throws a failure.
 
 ```typescript
 import { toYjs } from "yjs-proxy"
 
 const ymap = toYjs({ a: 1 }) // Returns a Y.Map
-const unwrapped = toYjs(js) // Returns the original Y.Map/Y.Array
 ```
 
 ### `unwrapYjs(proxy)`
 
-Retrieves the underlying Yjs Map or Array from a `wrapYjs` proxy. Returns `undefined` if the value is not a proxy.
+Retrieves the underlying Yjs Map or Array from a `wrapYjs` proxy. Throws a `YjsProxyError` if the value is not a proxy.
+
+Note: This function returns `undefined` for proxies that are in "JSON mode" (e.g., detached from a document or created via `toYjsProxy`).
 
 ```typescript
 import { unwrapYjs } from "yjs-proxy"
 
-const yType = unwrapYjs(js) // Returns Y.Map or Y.Array
+const yjsValue = unwrapYjs(js) // Returns Y.Map or Y.Array
+```
+
+### `isYjsProxy(value)`
+
+Checks if a value is a `yjs-proxy` proxy.
+
+```typescript
+import { isYjsProxy } from "yjs-proxy"
+
+isYjsProxy(state) // true
+isYjsProxy({})    // false
 ```
 
 ### `markAsJs(value)`
@@ -202,7 +236,7 @@ isMarkedAsJs(js.nested)   // false (it's a Y.Map proxy)
 
 ### `yjsWrapperToJson(proxy)`
 
-Converts a `wrapYjs` proxy into a plain JSON-compatible object or array by calling the underlying Yjs type's `toJSON()` method.
+Converts a `wrapYjs` proxy into a plain JSON-compatible object or array by calling the underlying Y.js value's `toJSON()` method.
 
 ```typescript
 import { yjsWrapperToJson } from "yjs-proxy"
@@ -229,7 +263,7 @@ try {
 
 ## Observing Changes
 
-Since `yjs-proxy` uses standard Yjs types under the hood, you can use the native Yjs API to observe changes. Use `unwrapYjs` to get the underlying `Y.Map` or `Y.Array`.
+Since `yjs-proxy` uses standard Y.js values under the hood, you can use the native Yjs API to observe changes. Use `unwrapYjs` to get the underlying `Y.Map` or `Y.Array`.
 
 ```ts
 import { unwrapYjs } from "yjs-proxy"
@@ -294,7 +328,7 @@ Only plain objects (those with `Object.prototype` or `null` as their prototype) 
 
 Attempting to assign other types of objects (like class instances, `Map`, `Set`, etc.) will throw a `YjsProxyError`. If you need to store such objects, you must either convert them to plain objects first or use `markAsJs` to store them as raw data.
 
-`Uint8Array` and other Yjs types (like `Y.Text`, `Y.XmlFragment`, etc.) are also supported as they are natively handled by Yjs.
+`Uint8Array` and other Y.js values (like `Y.Text`, `Y.XmlFragment`, etc.) are also supported as they are natively handled by Yjs.
 
 #### Map proxies have `null` prototype
 

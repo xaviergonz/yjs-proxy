@@ -1,9 +1,9 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { markAsJs, toYjs, unwrapYjs, wrapYjs } from "../src/index"
+import { markAsJs, toYjs, wrapYjs } from "../src/index"
 
 describe("toYjs", () => {
-  test("converts JS objects to Yjs types recursively", () => {
+  test("converts JS objects to Y.js values recursively", () => {
     const doc = new Y.Doc()
     const bin = new Uint8Array([1, 2, 3])
     const raw = markAsJs({ secret: 42 })
@@ -29,52 +29,31 @@ describe("toYjs", () => {
     expect((yarr.get(1) as Y.Map<any>).get("b")).toBe(3)
   })
 
-  test("handles existing Yjs types and proxies", () => {
+  test("throws on existing Y.js values and proxies", () => {
     const doc = new Y.Doc()
     const ymap = doc.getMap("m")
     const proxy = wrapYjs(ymap)
 
-    // Proxy unwrapping
-    expect(toYjs(proxy)).toBe(ymap)
+    // Proxy
+    expect(() => toYjs(proxy)).toThrow("Value is already a yjs-proxy proxy")
 
     // As-is
-    expect(toYjs(ymap)).toBe(ymap)
+    expect(() => toYjs(ymap)).toThrow("Value is already a Y.js value")
 
-    // Cloning if parented
+    // Nested Y.js values are still cloned by convertJsToYjsValue
     const child = new Y.Map()
-    ymap.set("child", child)
+    child.set("a", 1)
     const result = toYjs({ other: child }) as Y.Map<any>
-    const resultDoc = new Y.Doc()
-    resultDoc.getArray("root").insert(0, [result])
-
+    // We need to add it to a doc to read it if it was cloned/unparented
+    const doc2 = new Y.Doc()
+    doc2.getArray("root").insert(0, [result])
     expect(result.get("other")).toBeInstanceOf(Y.Map)
-    expect(result.get("other")).not.toBe(child)
-    expect(result.get("other").parent).toBe(result)
+    expect(result.get("other").toJSON()).toEqual({ a: 1 })
   })
 
   test("throws on invalid inputs", () => {
-    // Cyclic
-    const cyclic: any = { a: 1 }
-    cyclic.self = cyclic
-    expect(() => toYjs(cyclic)).toThrow("Cyclic objects are not supported")
-
     // Invalid top-level
-    expect(() => toYjs(123 as any)).toThrow("Value cannot be converted to a Yjs Map or Array")
+    expect(() => toYjs(123 as any)).toThrow("Value cannot be converted to a Y.js Map or Array")
     expect(() => toYjs(null as any)).toThrow()
-  })
-
-  test("preserves identity of nested proxies when converting back", () => {
-    const doc = new Y.Doc()
-    const ymap = doc.getMap("m")
-    const js = wrapYjs<any>(ymap)
-
-    js.nested = { a: 1 }
-    const nestedProxy = js.nested
-
-    const result = toYjs(js)
-    expect(result).toBe(ymap)
-
-    const nestedYMap = ymap.get("nested")
-    expect(unwrapYjs(nestedProxy)).toBe(nestedYMap)
   })
 })
