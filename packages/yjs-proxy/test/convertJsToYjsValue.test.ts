@@ -1,8 +1,8 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
+import { markAsJs, unwrapYjs } from "../src"
 import { convertJsToYjsValue } from "../src/conversion"
-import { unwrapYjs, wrapYjs } from "../src/index"
-import { markAsJs } from "../src/markAsJs"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("convertJsToYjsValue", () => {
   test("unsupported type", () => {

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { toYjsProxy, unwrapYjs, wrapYjs } from "../src"
+import { toYjsProxy, unwrapYjs } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("wrapYjs (Y.Array)", () => {
   test("index assignment, length, push/pop", () => {

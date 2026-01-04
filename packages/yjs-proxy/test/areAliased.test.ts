@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { areAliased, wrapYjs } from "../src/index"
+import { areAliased } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("areAliased", () => {
   test("returns true for same proxy", () => {

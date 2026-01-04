@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { isYjsProxy, markAsJs, toYjsProxy, wrapYjs } from "../src/index"
+import { isYjsProxy, markAsJs, toYjsProxy } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("isYjsProxy", () => {
   test("returns true for proxies", () => {

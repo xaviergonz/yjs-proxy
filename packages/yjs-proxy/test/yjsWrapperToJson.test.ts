@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { markAsJs, toYjsProxy, wrapYjs, yjsWrapperToJson } from "../src/index"
+import { markAsJs, toYjsProxy, yjsWrapperToJson } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("yjsWrapperToJson", () => {
   test("converts proxies to plain JSON recursively", () => {

@@ -82,3 +82,21 @@ export function tryGetProxyState<T extends object>(value: T): ProxyState<T> | un
 export function setProxyState<T extends object>(proxy: T, state: ProxyState<T>): void {
   proxyToStateCache.set(proxy, state)
 }
+
+/**
+ * Internal function to remove a proxy from the cache.
+ * This is used when revoking proxies in scoped access.
+ *
+ * @param proxy The proxy to remove.
+ * @internal
+ */
+export function removeProxyFromCache(proxy: object): void {
+  const state = proxyToStateCache.get(proxy as YjsProxy)
+  if (state) {
+    const key = state.attached ? state.yjsValue : state.json
+    if (key && dataToProxyCache.get(key) === proxy) {
+      dataToProxyCache.delete(key)
+    }
+    proxyToStateCache.delete(proxy as YjsProxy)
+  }
+}

@@ -6,6 +6,7 @@ import { failure } from "./error/failure"
 import { applyToAllAliases, linkProxyWithExistingSiblings } from "./sharedRefs"
 import type { YjsProxy } from "./types"
 import { tryUnwrapJson, tryUnwrapYjs } from "./unwrapYjs"
+import { registerRevocableProxy } from "./withYjsProxy"
 
 /**
  * Normalizes an array index, handling negative values like JS array methods.
@@ -124,7 +125,7 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
   const cached = dataToProxyCache.get(key)
   if (cached) return cached as any[]
 
-  const proxy: any[] = new Proxy<any[]>([], {
+  const { proxy, revoke } = Proxy.revocable<any[]>([], {
     getPrototypeOf() {
       return Array.prototype
     },
@@ -427,7 +428,7 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
       )
       return true
     },
-    has(target, prop) {
+    has(target, prop): boolean {
       if (prop === "length") return true
 
       const index = parseArrayIndex(prop)
@@ -445,7 +446,7 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
       for (let i = 0; i < proxy.length; i++) keys.push(String(i))
       return keys
     },
-    getOwnPropertyDescriptor(_target, prop) {
+    getOwnPropertyDescriptor(_target, prop): PropertyDescriptor | undefined {
       if (prop === "length") {
         return {
           configurable: false,
@@ -503,6 +504,7 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
 
   dataToProxyCache.set(key, proxy)
   setProxyState(proxy, state)
+  registerRevocableProxy(proxy, revoke)
 
   // Link proxy aliases with any existing sibling proxies
   if (state.attached) {

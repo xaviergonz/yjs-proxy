@@ -1,7 +1,8 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
+import { toYjsProxy, unwrapYjs } from "../src"
 import { detachProxyOfYjsValue } from "../src/detachProxyOfYjsValue"
-import { toYjsProxy, unwrapYjs, wrapYjs } from "../src/index"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("detachProxyOfYjsValue", () => {
   test("returns undefined for non-Yjs values", () => {

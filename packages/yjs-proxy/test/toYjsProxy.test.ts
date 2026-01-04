@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import * as Y from "yjs"
-import { isYjsProxy, toYjsProxy, unwrapYjs, wrapYjs } from "../src"
+import { isYjsProxy, toYjsProxy, unwrapYjs } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("toYjsProxy", () => {
   it("should convert a plain object to a proxy in JSON mode", () => {

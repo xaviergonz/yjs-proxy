@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 import * as Y from "yjs"
-import { toYjs, wrapYjs, yjsWrapperToJson } from "../src"
+import { toYjs, yjsWrapperToJson } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("proxied object lifecycle", () => {
   it("should support the user's detachment use case", () => {

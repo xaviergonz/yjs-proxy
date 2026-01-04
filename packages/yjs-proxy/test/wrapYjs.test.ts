@@ -1,6 +1,6 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { wrapYjs } from "../src/index"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("wrapYjs", () => {
   test("wrapYjs unsupported type", () => {

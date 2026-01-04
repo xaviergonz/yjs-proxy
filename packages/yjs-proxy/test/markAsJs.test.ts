@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { isMarkedAsJs, isYjsProxy, markAsJs, wrapYjs } from "../src/index"
+import { isMarkedAsJs, isYjsProxy, markAsJs } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("markAsJs", () => {
   test("stores raw JS object/array and deep freezes it", () => {

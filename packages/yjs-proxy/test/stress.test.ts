@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { wrapYjs, yjsWrapperToJson } from "../src/index"
+import { yjsWrapperToJson } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("stress tests", () => {
   test("complex nested operations and consistency", () => {

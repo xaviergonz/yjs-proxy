@@ -44,12 +44,15 @@ const text = ymap.get("todos").get(0).get("text")
 ### After (yjs-proxy)
 
 ```ts
-const state = wrapYjs(doc.getMap("state"))
+withYjsProxy<{ count: number; todos: { text: string; done: boolean }[] }>(
+  doc.getMap("state"),
+  (state) => {
+    state.count = 1
+    state.todos = [{ text: "buy milk", done: false }]
 
-state.count = 1
-state.todos = [{ text: "buy milk", done: false }]
-
-const text = state.todos[0].text // Full autocompletion!
+    const text = state.todos[0].text // Full autocompletion!
+  }
+)
 ```
 
 ## Features
@@ -58,6 +61,7 @@ const text = state.todos[0].text // Full autocompletion!
 - 🌲 **Automatic Nesting**: Plain objects and arrays are automatically converted to nested `Y.Map` and `Y.Array`.
 - 🔒 **Type Safe**: Full TypeScript support with deep type inference.
 - ⚡ **Automatic Transactions**: Mutations are automatically wrapped in `doc.transact()` if attached to a document.
+- �️ **Scoped Proxies**: Proxies are valid only inside the callback, preventing stale references.
 - 🚀 **Zero Dependencies**: Lightweight and fast, built on native Proxies.
 - 💎 **Opt-out CRDT**: Use `markAsJs()` to store large static objects as raw JSON for performance.
 
@@ -86,7 +90,7 @@ yarn add yjs-proxy
 
 ```ts
 import * as Y from "yjs"
-import { wrapYjs } from "yjs-proxy"
+import { withYjsProxy } from "yjs-proxy"
 
 type State = {
   count: number
@@ -96,20 +100,21 @@ type State = {
 const doc = new Y.Doc()
 const ystate = doc.getMap("state")
 
-const state = wrapYjs<State>(ystate)
+withYjsProxy<State>(ystate, (state) => {
+  state.count = 1
+  state.todos = [{ id: "1", text: "ship it", done: false }]
+  state.todos.push({ id: "2", text: "write docs", done: true })
 
-state.count = 1
-state.todos = [{ id: "1", text: "ship it", done: false }]
-state.todos.push({ id: "2", text: "write docs", done: true })
-
-state.todos[0].done = true
+  state.todos[0].done = true
+})
 ```
 
 ## Key concepts
 
-- **Only `Y.Map` and `Y.Array` are proxied.** `wrapYjs` throws if you pass a different type.
+- **Scoped proxy access.** `withYjsProxy` provides proxies that are only valid inside the callback. After the callback returns, all proxies are revoked and will throw on access. This prevents stale reference bugs.
+- **Only `Y.Map` and `Y.Array` are proxied.** `withYjsProxy` throws if you pass a different type.
 - **Plain objects/arrays become CRDTs.** Assigning `{}` or `[]` recursively becomes nested `Y.Map` / `Y.Array`.
-- **Existing proxies/Y.js values are integrated.** Assigning a `wrapYjs` proxy or a `Y.Map`/`Y.Array` will reuse the underlying structure if it's not already part of a document or parent; otherwise, it is automatically cloned.
+- **Existing proxies/Y.js values are integrated.** Assigning a proxy or a `Y.Map`/`Y.Array` will reuse the underlying structure if it's not already part of a document or parent; otherwise, it is automatically cloned.
 - **Attached vs Detached mode.** A proxy can be in one of two states:
   - **Attached**: The proxy is linked to a `Y.Doc`. Mutations are automatically wrapped in `doc.transact()` and synced with other clients.
   - **Detached**: The proxy is not linked to a document (e.g., it was just created via `toYjsProxy` or its property was deleted from an attached parent). It operates on a local JSON representation.
@@ -120,32 +125,45 @@ state.todos[0].done = true
 
 This section documents the public exports from `yjs-proxy`.
 
-### `wrapYjs(yjsValue)`
+### `withYjsProxy(yValue, callback)`
 
-Wraps a `Y.Map` or `Y.Array` in a Proxy that behaves like a plain JS object or array.
+Provides scoped access to Yjs values as proxies. Proxies are only valid inside the callback and are automatically revoked afterwards.
 
 - Reads return proxied nested `Y.Map`/`Y.Array` values.
 - Writes convert plain objects/arrays into nested Y.js values.
 - Mutations run inside a Yjs transaction when possible.
+- After the callback, all proxies are revoked and will throw on access.
 
 ```typescript
 import * as Y from "yjs"
-import { wrapYjs } from "yjs-proxy"
+import { withYjsProxy } from "yjs-proxy"
 
 const ydoc = new Y.Doc()
 const ymap = ydoc.getMap("mymap")
-const js = wrapYjs<{ a: number; nested: { b: string } }>(ymap)
 
-// Set values using standard syntax
-js.a = 1
-js.nested = { b: "hello" } // Automatically creates a nested Y.Map
+withYjsProxy<{ a: number; nested: { b: string } }>(ymap, (js) => {
+  // Set values using standard syntax
+  js.a = 1
+  js.nested = { b: "hello" } // Automatically creates a nested Y.Map
 
-// Read values
-console.log(js.a) // 1
-console.log(js.nested.b) // "hello"
+  // Read values
+  console.log(js.a) // 1
+  console.log(js.nested.b) // "hello"
 
-// Delete keys
-delete js.a
+  // Delete keys
+  delete js.a
+})
+
+// After the callback, accessing `js` would throw!
+```
+
+You can also pass multiple Yjs values as an array:
+
+```typescript
+withYjsProxy<[{ a: number }, { b: number }]>([ymap1, ymap2], ([p1, p2]) => {
+  p1.a = 1
+  p2.b = p1.a
+})
 ```
 
 ### `toYjsProxy(value, options?)`
@@ -159,14 +177,16 @@ Options:
 - `clone` (boolean, default `true`): If `true`, the input value is deep cloned. If `false`, the input value is used as the initial JSON data, meaning mutations to the proxy while detached will affect the original object.
 
 ```typescript
-import { toYjsProxy, wrapYjs } from "yjs-proxy"
+import * as Y from "yjs"
+import { toYjsProxy, withYjsProxy } from "yjs-proxy"
 
 const state = toYjsProxy({ count: 0 })
 state.count++ // Works in detached mode
 
 const doc = new Y.Doc()
-const root = wrapYjs(doc.getMap())
-root.state = state // Automatically attaches and syncs
+withYjsProxy<{ state: { count: number } }>(doc.getMap(), (root) => {
+  root.state = state // Automatically attaches and syncs
+})
 ```
 
 ### `toYjs(value)`
@@ -185,14 +205,17 @@ const ymap = toYjs({ a: 1 }) // Returns a Y.Map
 
 ### `unwrapYjs(proxy)`
 
-Retrieves the underlying Yjs Map or Array from a `wrapYjs` proxy. Throws a `YjsProxyError` if the value is not a proxy.
+Retrieves the underlying Yjs Map or Array from a `yjs-proxy` proxy. Throws a `YjsProxyError` if the value is not a proxy.
 
 Note: This function returns `undefined` for proxies that are in "JSON mode" (e.g., detached from a document or created via `toYjsProxy`).
 
 ```typescript
-import { unwrapYjs } from "yjs-proxy"
+import * as Y from "yjs"
+import { unwrapYjs, withYjsProxy } from "yjs-proxy"
 
-const yjsValue = unwrapYjs(js) // Returns Y.Map or Y.Array
+withYjsProxy<{ a: number }>(doc.getMap(), (js) => {
+  const yjsValue = unwrapYjs(js) // Returns Y.Map or Y.Array
+})
 ```
 
 ### `isYjsProxy(value)`
@@ -236,18 +259,24 @@ isMarkedAsJs(js.nested)   // false (it's a Y.Map proxy)
 
 ### `yjsWrapperToJson(proxy)`
 
-Converts a `wrapYjs` proxy into a plain JSON-compatible object or array by calling the underlying Y.js value's `toJSON()` method.
+Converts a `yjs-proxy` proxy into a plain JSON-compatible object or array by calling the underlying Y.js value's `toJSON()` method.
 
 ```typescript
-import { yjsWrapperToJson } from "yjs-proxy"
+import * as Y from "yjs"
+import { yjsWrapperToJson, withYjsProxy } from "yjs-proxy"
 
-const json = yjsWrapperToJson(js)
-console.log(json) // { a: 1, nested: { b: "hello" } }
+withYjsProxy<{ a: number; nested: { b: string } }>(doc.getMap(), (js) => {
+  js.a = 1
+  js.nested = { b: "hello" }
+
+  const json = yjsWrapperToJson(js)
+  console.log(json) // { a: 1, nested: { b: "hello" } }
+})
 ```
 
 ### `YjsProxyError`
 
-Some invalid operations throw a `YjsProxyError` (for example, passing unsupported values to `wrapYjs` / `toYjs` / `yjsWrapperToJson`).
+Some invalid operations throw a `YjsProxyError` (for example, passing unsupported values to `withYjsProxy` / `toYjs` / `yjsWrapperToJson`).
 
 ```ts
 import { YjsProxyError } from "yjs-proxy"
@@ -263,16 +292,36 @@ try {
 
 ## Observing Changes
 
-Since `yjs-proxy` uses standard Y.js values under the hood, you can use the native Yjs API to observe changes. Use `unwrapYjs` to get the underlying `Y.Map` or `Y.Array`.
+Since `yjs-proxy` uses standard Y.js values under the hood, you can use the native Yjs API to observe changes. Get the underlying `Y.Map` or `Y.Array` directly from the document and use its `observeDeep` method.
 
 ```ts
-import { unwrapYjs } from "yjs-proxy"
+import * as Y from "yjs"
+import { withYjsProxy } from "yjs-proxy"
 
-const state = wrapYjs(doc.getMap("state"))
-const yMap = unwrapYjs(state)
+const doc = new Y.Doc()
+const yMap = doc.getMap<{ count: number }>("state")
 
 yMap.observeDeep((events) => {
-  console.log("State changed!", state.count)
+  // Access values via Yjs API in observers
+  console.log("State changed!", yMap.get("count"))
+})
+
+withYjsProxy<{ count: number }>(yMap, (state) => {
+  state.count = 1 // This triggers the observer
+})
+```
+
+Alternatively, use `unwrapYjs` inside the callback to get the underlying Yjs value:
+
+```ts
+import { unwrapYjs, withYjsProxy } from "yjs-proxy"
+
+withYjsProxy<{ count: number }>(doc.getMap("state"), (state) => {
+  const yMap = unwrapYjs(state)
+  yMap?.observeDeep((events) => {
+    // Note: This observer will remain active after the callback,
+    // but the proxy will be revoked
+  })
 })
 ```
 

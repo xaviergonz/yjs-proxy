@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { unwrapYjs, wrapYjs } from "../src/index"
+import { unwrapYjs } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("assignment behaviors", () => {
   test("assigning an attached proxy to another property creates an alias", () => {

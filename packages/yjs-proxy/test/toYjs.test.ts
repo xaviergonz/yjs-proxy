@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest"
 import * as Y from "yjs"
-import { markAsJs, toYjs, wrapYjs } from "../src/index"
+import { markAsJs, toYjs } from "../src"
+import { wrapYjs } from "../src/wrapYjs"
 
 describe("toYjs", () => {
   test("converts JS objects to Y.js values recursively", () => {

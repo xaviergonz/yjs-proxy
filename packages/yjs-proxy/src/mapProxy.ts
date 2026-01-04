@@ -6,6 +6,7 @@ import { failure } from "./error/failure"
 import { applyToAllAliases, linkProxyWithExistingSiblings } from "./sharedRefs"
 import type { StringKeyedObject, YjsProxy } from "./types"
 import { tryUnwrapJson, tryUnwrapYjs } from "./unwrapYjs"
+import { registerRevocableProxy } from "./withYjsProxy"
 
 function setJsonMapValue(json: any, prop: string, value: any): void {
   // We unwrap proxies to their raw data to keep the JSON tree "pure".
@@ -67,7 +68,7 @@ export function createYMapProxy(state: ProxyState<any>): StringKeyedObject {
   const cached = dataToProxyCache.get(key)
   if (cached) return cached as StringKeyedObject
 
-  const proxy: StringKeyedObject = new Proxy<StringKeyedObject>(Object.create(null), {
+  const { proxy, revoke } = Proxy.revocable<StringKeyedObject>(Object.create(null), {
     getPrototypeOf() {
       return null
     },
@@ -127,21 +128,21 @@ export function createYMapProxy(state: ProxyState<any>): StringKeyedObject {
       )
       return true
     },
-    has(_target, prop) {
+    has(_target, prop): boolean {
       const state = tryGetProxyState<any>(proxy)!
       if (!state.attached) {
         return prop in state.json
       }
       return typeof prop === "string" && (state.yjsValue as Y.Map<any>).has(prop)
     },
-    ownKeys() {
+    ownKeys(): Array<string | symbol> {
       const state = tryGetProxyState<any>(proxy)!
       if (!state.attached) {
         return Object.keys(state.json)
       }
       return Array.from((state.yjsValue as Y.Map<any>).keys())
     },
-    getOwnPropertyDescriptor(_target, prop) {
+    getOwnPropertyDescriptor(_target, prop): PropertyDescriptor | undefined {
       if (prop in proxy) {
         return {
           configurable: true,
@@ -174,6 +175,7 @@ export function createYMapProxy(state: ProxyState<any>): StringKeyedObject {
 
   dataToProxyCache.set(key, proxy)
   setProxyState(proxy, state)
+  registerRevocableProxy(proxy, revoke)
 
   // Link proxy aliases with any existing sibling proxies
   if (state.attached) {
