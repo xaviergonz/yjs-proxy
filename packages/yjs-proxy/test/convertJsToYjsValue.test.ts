@@ -32,11 +32,11 @@ describe("convertJsToYjsValue", () => {
 
   test("unparented seen twice throws", () => {
     const ymap = new Y.Map()
-    const seen = new WeakSet<object>()
+    const ctx = { seen: new WeakSet<object>(), jsToYjs: new WeakMap() }
     // This should throw because we can't clone an unparented Y.js value twice
     // (actually we can't clone it at all if it's unparented, but we allow it once)
-    convertJsToYjsValue(ymap, seen)
-    expect(() => convertJsToYjsValue(ymap, seen)).toThrow("Cannot clone an unparented Y.js value")
+    convertJsToYjsValue(ymap, ctx)
+    expect(() => convertJsToYjsValue(ymap, ctx)).toThrow("Cannot clone an unparented Y.js value")
   })
 
   test("throws on deleted types", () => {

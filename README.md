@@ -312,7 +312,7 @@ Methods like `map`, `filter`, `slice`, `toSorted`, etc., return a **plain JS arr
 
 ### Object gotchas
 
-#### Identity mismatch
+#### Identity mismatch (but aliased mutations)
 
 When you assign a plain object or array to a property, it is converted into a `Y.Map` or `Y.Array` and then wrapped in a Proxy. This means the value you read back is **not** the same instance you assigned.
 
@@ -321,6 +321,33 @@ const obj = { x: 1 }
 state.a = obj
 console.log(state.a === obj) // false
 ```
+
+However, if you assign the same value (or an existing proxy) to multiple locations, they become **aliased**—mutations to one will propagate to all others:
+
+```ts
+const obj = { x: 1 }
+state.a = obj
+state.b = obj // Same object assigned again
+
+state.a.x = 10
+console.log(state.b.x) // 10 — automatically synced!
+
+// Also works with existing proxies:
+state.c = state.a
+state.c.x = 20
+console.log(state.a.x) // 20
+console.log(state.b.x) // 20
+```
+
+To check if two proxies are aliased, use `areAliased`:
+
+```ts
+import { areAliased } from "yjs-proxy"
+
+console.log(areAliased(state.a, state.b)) // true
+```
+
+> **Note:** Aliasing only works within the same `Y.Doc`. Assigning a value to a different document creates an independent clone.
 
 #### Only plain objects and arrays are supported
 

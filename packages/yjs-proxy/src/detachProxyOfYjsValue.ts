@@ -1,5 +1,7 @@
 import * as Y from "yjs"
 import { dataToProxyCache, setProxyState, tryGetProxyState } from "./cache"
+import { getProxyAliasSiblings, linkProxyAliases } from "./sharedRefs"
+import type { YjsProxy } from "./types"
 
 /**
  * Detaches a proxy from its Y.js value by creating a JSON representation of its current state.
@@ -30,8 +32,25 @@ function detachProxyOfYjsValueAndGetJSON(yjsValue: Y.AbstractType<any>): object 
     )
   }
 
+  // Check if any proxy alias sibling is already detached with shared JSON we can reuse
+  let sharedJson: object | undefined
+  let sharedJsonProxy: YjsProxy | undefined
+  if (proxy) {
+    for (const siblingProxy of getProxyAliasSiblings(proxy)) {
+      const siblingState = tryGetProxyState(siblingProxy)
+      if (siblingState && !siblingState.attached) {
+        sharedJson = siblingState.json
+        sharedJsonProxy = siblingProxy
+        break
+      }
+    }
+  }
+
   let json: any
-  if (yjsValue instanceof Y.Map) {
+  if (sharedJson) {
+    // Reuse the shared JSON from an already-detached alias sibling
+    json = sharedJson
+  } else if (yjsValue instanceof Y.Map) {
     json = {}
     for (const [key, value] of yjsValue.entries()) {
       json[key] = value instanceof Y.AbstractType ? detachProxyOfYjsValueAndGetJSON(value) : value
@@ -50,6 +69,11 @@ function detachProxyOfYjsValueAndGetJSON(yjsValue: Y.AbstractType<any>): object 
   if (proxy) {
     setProxyState(proxy, { attached: false, json })
     dataToProxyCache.set(json, proxy)
+
+    // Link proxies at the proxy level for areAliased to work
+    if (sharedJsonProxy) {
+      linkProxyAliases(proxy, sharedJsonProxy)
+    }
   }
 
   return json

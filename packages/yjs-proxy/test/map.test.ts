@@ -48,7 +48,7 @@ describe("wrapYjs (Y.Map)", () => {
     expect(js.list).toEqual([1, 2, 3])
   })
 
-  test("reusing a proxied nested object clones (independence check)", () => {
+  test("reusing a proxied nested object creates alias (sync check)", () => {
     const doc = new Y.Doc()
     const ymap = doc.getMap("m")
     const js = wrapYjs<Record<string, any>>(ymap)
@@ -58,9 +58,9 @@ describe("wrapYjs (Y.Map)", () => {
 
     expect(js.x).not.toBe(js.y)
 
-    // Modifying one should not affect the other
+    // With aliasing, modifying one DOES affect the other
     js.y.a = 2
-    expect(js.x.a).toBe(1)
+    expect(js.x.a).toBe(2)
     expect(js.y.a).toBe(2)
 
     const xY = unwrapYjs(js.x)
@@ -249,7 +249,7 @@ describe("wrapYjs (Y.Map)", () => {
     expect(p1).toBe(p2)
   })
 
-  test("assigning a proxy to another proxy clones the underlying Y.js value", () => {
+  test("assigning a proxy to another proxy creates alias for the underlying Y.js value", () => {
     const doc = new Y.Doc()
     const ymap1 = doc.getMap("m1")
     const ymap2 = doc.getMap("m2")
@@ -262,10 +262,10 @@ describe("wrapYjs (Y.Map)", () => {
     expect(p1.x).not.toBe(p2)
     expect(p1.x.a).toBe(1)
 
-    // Independence check
+    // With aliasing, modifying one DOES affect the other
     p1.x.a = 2
     expect(p1.x.a).toBe(2)
-    expect(p2.a).toBe(1)
+    expect(p2.a).toBe(2)
   })
 
   test("nested proxy identity (cache check)", () => {

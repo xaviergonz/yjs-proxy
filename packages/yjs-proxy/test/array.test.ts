@@ -61,7 +61,7 @@ describe("wrapYjs (Y.Array)", () => {
     expect(js).toEqual([3, 1, 2])
   })
 
-  test("reusing a proxied element clones (independence check)", () => {
+  test("reusing a proxied element creates alias (sync check)", () => {
     const doc = new Y.Doc()
     const yarr = doc.getArray("a")
     const js = wrapYjs<any[]>(yarr)
@@ -71,9 +71,9 @@ describe("wrapYjs (Y.Array)", () => {
 
     expect(js[0]).not.toBe(js[1])
 
-    // Modifying one should not affect the other
+    // With aliasing, modifying one DOES affect the other
     js[1].a = 2
-    expect(js[0].a).toBe(1)
+    expect(js[0].a).toBe(2)
     expect(js[1].a).toBe(2)
 
     const y0 = unwrapYjs(js[0])
@@ -488,7 +488,7 @@ describe("wrapYjs (Y.Array)", () => {
     expect(p1).toBe(p2)
   })
 
-  test("assigning a proxy to another proxy clones the underlying Y.js value", () => {
+  test("assigning a proxy to another proxy creates alias for the underlying Y.js value", () => {
     const doc = new Y.Doc()
     const yarr1 = doc.getArray("a1")
     const yarr2 = doc.getArray("a2")
@@ -501,10 +501,10 @@ describe("wrapYjs (Y.Array)", () => {
     expect(p1[0]).not.toBe(p2)
     expect(p1[0]).toEqual([1])
 
-    // Independence check
+    // With aliasing, modifying one DOES affect the other
     p1[0].push(2)
     expect(p1[0]).toEqual([1, 2])
-    expect(p2).toEqual([1])
+    expect(p2).toEqual([1, 2])
   })
 
   test("in operator for indices, length, and methods", () => {

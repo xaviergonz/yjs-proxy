@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.2.0
+
+- **Aliasing support**: When the same plain JS object or existing proxy is assigned to multiple locations, they become aliases. Mutations to one automatically propagate to all others within the same `Y.Doc`.
+- Added `areAliased(a, b)` function to check if two proxies are aliased.
+- Aliasing persists across attach/detach cycles - detached aliased proxies share the same underlying JSON and stay in sync.
+
 ## 1.1.0
 
 - Proxies can now be in attached or detached mode. In attached mode the proxies back an active Y.js value, while in detached mode they back a plain JS object/array. This is because Y.js values can be written, but they cannot be read / transformed to JSON while detached.

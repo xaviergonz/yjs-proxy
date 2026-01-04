@@ -1,3 +1,4 @@
+export { areAliased } from "./areAliased"
 export { isYjsProxy } from "./cache"
 export { YjsProxyError } from "./error/YjsProxyError"
 export { isMarkedAsJs, markAsJs } from "./markAsJs"

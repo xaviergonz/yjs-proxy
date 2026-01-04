@@ -1,36 +1,47 @@
 import * as Y from "yjs"
-import { dataToProxyCache, ProxyState, setProxyState, tryGetProxyState } from "./cache"
+import { dataToProxyCache, type ProxyState, setProxyState, tryGetProxyState } from "./cache"
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
 import { detachProxyOfYjsValue } from "./detachProxyOfYjsValue"
 import { failure } from "./error/failure"
-import { StringKeyedObject } from "./types"
+import { applyToAllAliases, linkProxyWithExistingSiblings } from "./sharedRefs"
+import type { StringKeyedObject, YjsProxy } from "./types"
 import { tryUnwrapJson, tryUnwrapYjs } from "./unwrapYjs"
-import { transactIfPossible } from "./utils"
 
-function setJsonMapValue(json: any, prop: string, value: any): boolean {
+function setJsonMapValue(json: any, prop: string, value: any): void {
   // We unwrap proxies to their raw data to keep the JSON tree "pure".
   // See the architectural note in cache.ts.
   json[prop] = tryUnwrapJson(value) ?? value
-  return true
 }
 
-function setYMapValue(ymap: Y.Map<unknown>, prop: string, value: any): boolean {
-  // detach old value if it exists
+function isYMapSetNoOp(ymap: Y.Map<unknown>, prop: string, value: any): boolean {
+  if (!ymap.has(prop)) return false
+  const currentYjsValue = ymap.get(prop)
+  if (currentYjsValue === value) return true
+  const newYjsValue = tryUnwrapYjs(value)
+  return !!(newYjsValue && newYjsValue === currentYjsValue)
+}
+
+function setYMapValue(ymap: Y.Map<unknown>, prop: string, value: any): void {
   if (ymap.has(prop)) {
-    const currentYjsValue = ymap.get(prop)
-    if (currentYjsValue === value) return true
-
-    const newYjsValue = tryUnwrapYjs(value)
-    if (newYjsValue && newYjsValue === currentYjsValue) return true
-
-    detachProxyOfYjsValue(currentYjsValue)
+    // detach old value
+    detachProxyOfYjsValue(ymap.get(prop))
   }
 
-  transactIfPossible(ymap, () => {
-    const converted = convertJsToYjsValue(value)
-    ymap.set(prop, converted)
-  })
-  return true
+  const converted = convertJsToYjsValue(value)
+  ymap.set(prop, converted)
+}
+
+function isYMapDeleteNoOp(ymap: Y.Map<unknown>, prop: string): boolean {
+  return !ymap.has(prop)
+}
+
+function deleteYMapValue(ymap: Y.Map<unknown>, prop: string): void {
+  detachProxyOfYjsValue(ymap.get(prop))
+  ymap.delete(prop)
+}
+
+function deleteJsonMapValue(json: any, prop: string): void {
+  delete json[prop]
 }
 
 /**
@@ -89,31 +100,31 @@ export function createYMapProxy(state: ProxyState<any>): StringKeyedObject {
         throw failure(`Objects do not support symbol properties: ${String(prop)}`)
       }
       const state = tryGetProxyState<any>(proxy)!
-      if (!state.attached) {
-        return setJsonMapValue(state.json, prop, value)
+      // Check for no-op before starting transaction
+      if (state.attached && isYMapSetNoOp(state.yjsValue as Y.Map<unknown>, prop, value)) {
+        return true
       }
-      return setYMapValue(state.yjsValue as Y.Map<any>, prop, value)
+      applyToAllAliases<Y.Map<unknown>, any>(
+        proxy as YjsProxy,
+        (ymap) => setYMapValue(ymap, prop, value),
+        (json) => setJsonMapValue(json, prop, value)
+      )
+      return true
     },
     deleteProperty(_target, prop) {
       if (typeof prop !== "string") {
         return true
       }
-
       const state = tryGetProxyState<any>(proxy)!
-      if (!state.attached) {
-        delete state.json[prop]
+      // Check for no-op before starting transaction
+      if (state.attached && isYMapDeleteNoOp(state.yjsValue as Y.Map<unknown>, prop)) {
         return true
       }
-
-      const currentYMap = state.yjsValue as Y.Map<any>
-      if (!currentYMap.has(prop)) {
-        return true
-      }
-
-      detachProxyOfYjsValue(currentYMap.get(prop))
-      transactIfPossible(currentYMap, () => {
-        currentYMap.delete(prop)
-      })
+      applyToAllAliases<Y.Map<unknown>, any>(
+        proxy as YjsProxy,
+        (ymap) => deleteYMapValue(ymap, prop),
+        (json) => deleteJsonMapValue(json, prop)
+      )
       return true
     },
     has(_target, prop) {
@@ -163,5 +174,11 @@ export function createYMapProxy(state: ProxyState<any>): StringKeyedObject {
 
   dataToProxyCache.set(key, proxy)
   setProxyState(proxy, state)
+
+  // Link proxy aliases with any existing sibling proxies
+  if (state.attached) {
+    linkProxyWithExistingSiblings(proxy as YjsProxy, state.yjsValue as Y.Map<any>)
+  }
+
   return proxy
 }

@@ -1,6 +1,6 @@
 {
   "name": "yjs-proxy",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Proxy-based ergonomics for Yjs (CRDT): use Y.Map and Y.Array like plain JS objects and arrays.",
   "keywords": [
     "yjs",
