@@ -1,7 +1,7 @@
 import * as Y from "yjs"
 import { convertJsToYjsValue } from "./conversion"
 import { failure } from "./error/failure"
-import { StringKeyedObject } from "./types"
+import { StringKeyedObject, YjsProxiableValue } from "./types"
 import { tryUnwrapYjs } from "./unwrapYjs"
 
 /**
@@ -17,9 +17,9 @@ import { tryUnwrapYjs } from "./unwrapYjs"
  */
 export function toYjs(value: any[]): Y.Array<unknown>
 export function toYjs(value: StringKeyedObject): Y.Map<unknown>
-export function toYjs(value: object): Y.Map<unknown> | Y.Array<unknown>
+export function toYjs(value: object): YjsProxiableValue
 
-export function toYjs(value: any): Y.Map<unknown> | Y.Array<unknown> {
+export function toYjs(value: any): YjsProxiableValue {
   if (value instanceof Y.Map || value instanceof Y.Array) {
     throw failure("Value is already a Y.js value")
   }

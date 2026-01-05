@@ -2,7 +2,7 @@ import * as Y from "yjs"
 import { yarrayProxy } from "./arrayProxy"
 import { failure } from "./error/failure"
 import { ymapProxy } from "./mapProxy"
-import { StringKeyedObject } from "./types"
+import { StringKeyedObject, YjsProxiableValue } from "./types"
 import { isYjsValueDeleted } from "./utils"
 
 /**
@@ -17,9 +17,9 @@ import { isYjsValueDeleted } from "./utils"
  */
 export function wrapYjs<T extends any[]>(yArray: Y.Array<any>): T
 export function wrapYjs<T extends StringKeyedObject>(yMap: Y.Map<any>): T
-export function wrapYjs<T>(yjsValue: Y.Map<any> | Y.Array<any>): T
+export function wrapYjs<T>(yjsValue: YjsProxiableValue): T
 
-export function wrapYjs<T>(yjsValue: Y.Map<any> | Y.Array<any>): T {
+export function wrapYjs<T>(yjsValue: YjsProxiableValue): T {
   if (isYjsValueDeleted(yjsValue)) {
     throw failure("Cannot wrap a deleted Y.js value")
   }

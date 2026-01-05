@@ -4,7 +4,13 @@ export { YjsProxyError } from "./error/YjsProxyError"
 export { isMarkedAsJs, markAsJs } from "./markAsJs"
 export { toYjs } from "./toYjs"
 export { toYjsProxy } from "./toYjsProxy"
-export type { StringKeyedObject } from "./types"
+export type { StringKeyedObject, YjsProxiableValue } from "./types"
 export { unwrapYjs } from "./unwrapYjs"
-export { withYjsProxy } from "./withYjsProxy"
+export {
+  type AutoModeOptions,
+  type ManualModeContext,
+  type ManualModeOptions,
+  type TransactionMode,
+  withYjsProxy,
+} from "./withYjsProxy"
 export { yjsWrapperToJson } from "./yjsWrapperToJson"

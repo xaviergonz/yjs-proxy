@@ -1,6 +1,5 @@
-import * as Y from "yjs"
 import { failure } from "./error/failure"
-import { YjsProxy } from "./types"
+import { YjsProxiableValue, YjsProxy } from "./types"
 import { isObjectLike, isYjsValueDeleted } from "./utils"
 
 /**
@@ -23,7 +22,7 @@ import { isObjectLike, isYjsValueDeleted } from "./utils"
  * (see `tryUnwrapJson`) to store the raw data instead of the proxy itself.
  */
 export type ProxyState<T> =
-  | { attached: true; yjsValue: Y.Map<any> | Y.Array<any>; json?: never }
+  | { attached: true; yjsValue: YjsProxiableValue; json?: never }
   | { attached: false; json: T; yjsValue?: never }
 
 const proxyToStateCache = new WeakMap<YjsProxy, ProxyState<any>>()

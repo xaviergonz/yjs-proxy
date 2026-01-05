@@ -3,6 +3,7 @@ import { dataToProxyCache, markedAsJsValues, setProxyState, tryGetProxyState } f
 import { failure } from "./error/failure"
 import { isMarkedAsJs } from "./markAsJs"
 import { jsObjectToFirstYjsValue, linkAliases } from "./sharedRefs"
+import { YjsProxiableValue } from "./types"
 import { tryUnwrapYjs } from "./unwrapYjs"
 import { deepFreeze, isObjectLike, isPlainObject, isYjsValueDeleted } from "./utils"
 import { wrapYjs } from "./wrapYjs"
@@ -15,7 +16,7 @@ import { wrapYjs } from "./wrapYjs"
 interface ConversionContext {
   seen: WeakSet<object>
   /** Tracks objects within this single conversion (for cycle detection and local aliasing) */
-  jsToYjs: WeakMap<object, Y.Map<any> | Y.Array<any>>
+  jsToYjs: WeakMap<object, YjsProxiableValue>
 }
 
 function createConversionContext(): ConversionContext {
@@ -81,7 +82,7 @@ export function convertJsToYjsValue(
       const cloned = yjsValue.clone()
       // Link the original and clone as aliases so mutations propagate
       if (yjsValue instanceof Y.Map || yjsValue instanceof Y.Array) {
-        linkAliases(yjsValue, cloned as Y.Map<any> | Y.Array<any>)
+        linkAliases(yjsValue, cloned as YjsProxiableValue)
       }
       return cloned
     }
@@ -183,7 +184,7 @@ export function convertJsToYjsValue(
  */
 export function convertYjsToJsValue(value: unknown): unknown {
   if (value instanceof Y.Map || value instanceof Y.Array) {
-    const yjsValue = value as Y.Map<any> | Y.Array<any>
+    const yjsValue = value as YjsProxiableValue
     if (isYjsValueDeleted(yjsValue)) {
       throw failure("Cannot wrap a deleted Y.js value")
     }

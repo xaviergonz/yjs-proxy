@@ -1,7 +1,8 @@
 import * as Y from "yjs"
 import { dataToProxyCache, tryGetProxyState } from "./cache"
-import type { YjsProxy } from "./types"
+import type { YjsProxiableValue, YjsProxy } from "./types"
 import { transactIfPossible } from "./utils"
+import { getScopeOrigin } from "./withYjsProxy"
 
 /**
  * Maps a Y.js value to its alias group (a set of Y.js values that should stay in sync).
@@ -22,15 +23,13 @@ export const proxyAliasGroups = new WeakMap<YjsProxy, Set<YjsProxy>>()
  * Used to track aliases across separate conversion operations.
  * @internal
  */
-export const jsObjectToFirstYjsValue = new WeakMap<object, Y.Map<any> | Y.Array<any>>()
+export const jsObjectToFirstYjsValue = new WeakMap<object, YjsProxiableValue>()
 
 /**
  * Gets the alias group for a Y.js value, or undefined if it has no aliases.
  * @internal
  */
-export function getAliasGroup(
-  yjsValue: Y.Map<any> | Y.Array<any>
-): Set<Y.AbstractType<any>> | undefined {
+export function getAliasGroup(yjsValue: YjsProxiableValue): Set<Y.AbstractType<any>> | undefined {
   return aliasGroups.get(yjsValue)
 }
 
@@ -39,7 +38,7 @@ export function getAliasGroup(
  * Mutations to one will be propagated to the other.
  * @internal
  */
-export function linkAliases(a: Y.Map<any> | Y.Array<any>, b: Y.Map<any> | Y.Array<any>): void {
+export function linkAliases(a: YjsProxiableValue, b: YjsProxiableValue): void {
   if (a === b) return // Same value, nothing to link
 
   const groupA = aliasGroups.get(a)
@@ -69,7 +68,7 @@ export function linkAliases(a: Y.Map<any> | Y.Array<any>, b: Y.Map<any> | Y.Arra
  * Removes a Y.js value from its alias group (e.g., when deleted from document).
  * @internal
  */
-export function unlinkAlias(yjsValue: Y.Map<any> | Y.Array<any>): void {
+export function unlinkAlias(yjsValue: YjsProxiableValue): void {
   const group = aliasGroups.get(yjsValue)
   if (!group) return
 
@@ -91,20 +90,18 @@ export function unlinkAlias(yjsValue: Y.Map<any> | Y.Array<any>): void {
  * Returns empty array if no aliases.
  * @internal
  */
-export function getAliasSiblings(
-  yjsValue: Y.Map<any> | Y.Array<any>
-): Array<Y.Map<any> | Y.Array<any>> {
+export function getAliasSiblings(yjsValue: YjsProxiableValue): YjsProxiableValue[] {
   const group = aliasGroups.get(yjsValue)
   if (!group || group.size <= 1) return []
 
   const sourceDoc = yjsValue.doc
 
-  const siblings: Array<Y.Map<any> | Y.Array<any>> = []
+  const siblings: YjsProxiableValue[] = []
   for (const member of group) {
     if (member !== yjsValue) {
       // Only include siblings in the same document (or both unparented)
       if (member.doc === sourceDoc) {
-        siblings.push(member as Y.Map<any> | Y.Array<any>)
+        siblings.push(member as YjsProxiableValue)
       }
     }
   }
@@ -120,10 +117,7 @@ export function getAliasSiblings(
  * @param b Second Y.js value (Y.Map or Y.Array)
  * @returns `true` if the values are aliases, `false` otherwise
  */
-export function areYjsValuesAliased(
-  a: Y.Map<any> | Y.Array<any>,
-  b: Y.Map<any> | Y.Array<any>
-): boolean {
+export function areYjsValuesAliased(a: YjsProxiableValue, b: YjsProxiableValue): boolean {
   if (a === b) return true
   const groupA = aliasGroups.get(a)
   return !!groupA?.has(b)
@@ -196,10 +190,7 @@ export function areProxiesAliased(a: YjsProxy, b: YjsProxy): boolean {
  * @param yjsValue The Y.js value the proxy wraps
  * @internal
  */
-export function linkProxyWithExistingSiblings(
-  proxy: YjsProxy,
-  yjsValue: Y.Map<any> | Y.Array<any>
-): void {
+export function linkProxyWithExistingSiblings(proxy: YjsProxy, yjsValue: YjsProxiableValue): void {
   for (const sibling of getAliasSiblings(yjsValue)) {
     const siblingProxy = dataToProxyCache.get(sibling) as YjsProxy | undefined
     if (siblingProxy) {
@@ -222,7 +213,7 @@ export function linkProxyWithExistingSiblings(
  * @param jsonFn Function to apply to detached JSON values (object or array)
  * @internal
  */
-export function applyToAllAliases<T extends Y.Map<any> | Y.Array<any>, J extends object>(
+export function applyToAllAliases<T extends YjsProxiableValue, J extends object>(
   proxy: YjsProxy,
   yjsFn: (yjsValue: T) => void,
   jsonFn: (json: J) => void
@@ -274,10 +265,14 @@ export function applyToAllAliases<T extends Y.Map<any> | Y.Array<any>, J extends
 
   // Apply Y.js mutations in a single transaction
   if (yjsValues.length > 0) {
-    transactIfPossible(yjsValues[0], () => {
-      for (const yjsValue of yjsValues) {
-        yjsFn(yjsValue)
-      }
-    })
+    transactIfPossible(
+      yjsValues[0],
+      () => {
+        for (const yjsValue of yjsValues) {
+          yjsFn(yjsValue)
+        }
+      },
+      getScopeOrigin()
+    )
   }
 }

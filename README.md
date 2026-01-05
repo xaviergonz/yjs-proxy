@@ -166,6 +166,44 @@ withYjsProxy<[{ a: number }, { b: number }]>([ymap1, ymap2], ([p1, p2]) => {
 })
 ```
 
+#### Manual Transaction Mode (Async Support)
+
+Use `transactionMode: 'manual'` for async operations or fine-grained transaction control:
+
+```typescript
+await withYjsProxy<State>(ymap, async (state, ctx) => {
+  const current = state.count
+
+  const data = await fetchData()
+
+  // Check if external changes invalidated our proxies
+  if (ctx.isProxyInvalidated()) {
+    throw new Error("State changed while fetching")
+  }
+
+  // Optionally batch multiple changes
+  ctx.transact(() => {
+    state.count = data.newCount
+    state.name = data.name
+  })
+}, { transactionMode: 'manual' })
+```
+
+In manual mode:
+
+- Proxies are **not** automatically wrapped in a transaction
+- Use `ctx.transact()` to batch changes
+- If external Yjs changes occur, proxies are revoked and `ctx.isProxyInvalidated()` returns `true`
+- Accessing a revoked proxy throws: `"Proxy invalidated: the underlying Y.Map was modified externally"`
+
+You can provide a custom transaction origin in either mode:
+
+```typescript
+withYjsProxy(ymap, (state) => {
+  state.count = 1
+}, { origin: 'my-custom-origin' })
+```
+
 ### `toYjsProxy(value, options?)`
 
 Converts a plain JS object or array into a `yjs-proxy` proxy that starts in **detached mode**.

@@ -1,5 +1,16 @@
 # Changelog
 
+## 2.1.0
+
+### New Features
+
+- **Manual transaction mode**: `withYjsProxy` now supports `transactionMode: 'manual'` for async callbacks and fine-grained transaction control.
+  - Async callbacks are supported
+  - External Yjs changes automatically revoke proxies
+  - `ctx.isProxyInvalidated()` to check if proxies were invalidated
+  - `ctx.transact()` to batch changes
+  - Optional custom `origin` for transaction tracking (also available in auto mode)
+
 ## 2.0.0
 
 ### Breaking Changes

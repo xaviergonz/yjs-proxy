@@ -1,5 +1,5 @@
 import * as Y from "yjs"
-import { StringKeyedObject } from "./types"
+import { StringKeyedObject, YjsProxiableValue } from "./types"
 
 /**
  * Checks if a value is object-like (not null and type is 'object').
@@ -39,15 +39,20 @@ export function isYjsValueDeleted(yjsValue: Y.AbstractType<any>): boolean {
  *
  * @param yjsValue The Y.js value to check for a document.
  * @param fn The function to execute.
+ * @param origin Optional transaction origin for tracking.
  * @returns The result of the function.
  */
-export function transactIfPossible<T>(yjsValue: Y.Map<any> | Y.Array<any>, fn: () => T): T {
+export function transactIfPossible<T>(
+  yjsValue: YjsProxiableValue,
+  fn: () => T,
+  origin?: unknown
+): T {
   const doc = (yjsValue as any).doc
   if (doc) {
     let result: T
     doc.transact(() => {
       result = fn()
-    })
+    }, origin)
     return result!
   }
   return fn()
