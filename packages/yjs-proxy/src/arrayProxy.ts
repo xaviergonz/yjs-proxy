@@ -3,6 +3,7 @@ import { dataToProxyCache, type ProxyState, setProxyState, tryGetProxyState } fr
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
 import { detachProxyOfYjsValue } from "./detachProxyOfYjsValue"
 import { failure } from "./error/failure"
+import { getRollbackContext } from "./rollback"
 import { applyToAllAliases, linkProxyWithExistingSiblings } from "./sharedRefs"
 import type { YjsProxy } from "./types"
 import { tryUnwrapJson, tryUnwrapYjs } from "./unwrapYjs"
@@ -196,6 +197,16 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
 
             switch (prop) {
               case "push": {
+                // Log inverse operation BEFORE mutation
+                const rollbackCtx = getRollbackContext()
+                const oldLength = proxy.length
+
+                if (rollbackCtx?.canRollback) {
+                  rollbackCtx.log(() => {
+                    proxy.length = oldLength
+                  })
+                }
+
                 applyToAliases(
                   (arr) => {
                     arr.insert(arr.length, args.map(convert))
@@ -204,12 +215,21 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
                     json.push(...args.map((v) => tryUnwrapJson(v) ?? v))
                   }
                 )
+
                 return currentYArr.length
               }
 
               case "pop": {
                 if (currentYArr.length === 0) return undefined
-                const lastJsValue = convertYjsToJsValue(currentYArr.get(currentYArr.length - 1))
+                const lastJsValue = proxy[proxy.length - 1]
+
+                const rollbackCtx = getRollbackContext()
+                if (rollbackCtx?.canRollback) {
+                  rollbackCtx.log(() => {
+                    proxy.push(lastJsValue)
+                  })
+                }
+
                 applyToAliases(
                   (arr) => {
                     if (arr.length > 0) {
@@ -225,6 +245,15 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
               }
 
               case "unshift": {
+                const rollbackCtx = getRollbackContext()
+                const insertCount = args.length
+
+                if (rollbackCtx?.canRollback && insertCount > 0) {
+                  rollbackCtx.log(() => {
+                    proxy.splice(0, insertCount)
+                  })
+                }
+
                 applyToAliases(
                   (arr) => {
                     arr.insert(0, args.map(convert))
@@ -233,12 +262,21 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
                     json.unshift(...args.map((v) => tryUnwrapJson(v) ?? v))
                   }
                 )
+
                 return currentYArr.length
               }
 
               case "shift": {
                 if (currentYArr.length === 0) return undefined
-                const firstJsValue = convertYjsToJsValue(currentYArr.get(0))
+                const firstJsValue = proxy[0]
+
+                const rollbackCtx = getRollbackContext()
+                if (rollbackCtx?.canRollback) {
+                  rollbackCtx.log(() => {
+                    proxy.unshift(firstJsValue)
+                  })
+                }
+
                 applyToAliases(
                   (arr) => {
                     if (arr.length > 0) {
@@ -259,15 +297,23 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
                 const items = args.slice(2)
 
                 // Calculate for primary array to determine return value
-                const len = currentYArr.length
+                const len = proxy.length
                 const actualStart = normalizeIndex(start, len)
                 const actualDeleteCount =
                   deleteCount === undefined
                     ? len - actualStart
                     : Math.min(Math.max(deleteCount, 0), len - actualStart)
-                const deletedJsValues = currentYArr
-                  .slice(actualStart, actualStart + actualDeleteCount)
-                  .map((val) => convertYjsToJsValue(val))
+
+                const deletedJsValues = proxy.slice(actualStart, actualStart + actualDeleteCount)
+                const insertCount = items.length
+
+                const rollbackCtx = getRollbackContext()
+                if (rollbackCtx?.canRollback) {
+                  rollbackCtx.log(() => {
+                    // Remove what was inserted, re-insert what was deleted
+                    proxy.splice(actualStart, insertCount, ...deletedJsValues)
+                  })
+                }
 
                 applyToAliases(
                   (arr) => {
@@ -369,6 +415,26 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
         if (state.attached && isYArrayLengthNoOp(state.yjsValue as Y.Array<unknown>, value)) {
           return true
         }
+
+        const rollbackCtx = getRollbackContext()
+        if (rollbackCtx?.canRollback) {
+          const oldLength = proxy.length
+          const newLen = Number(value)
+
+          if (newLen < oldLength) {
+            // Truncating - save items being removed
+            const removedItems = proxy.slice(newLen)
+            rollbackCtx.log(() => {
+              proxy.push(...removedItems)
+            })
+          } else if (newLen > oldLength) {
+            // Extending - rollback by truncating
+            rollbackCtx.log(() => {
+              proxy.length = oldLength
+            })
+          }
+        }
+
         applyToAllAliases<Y.Array<unknown>, any[]>(
           proxy as YjsProxy,
           (arr) => setYArrayLength(arr, value),
@@ -383,6 +449,23 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
         if (state.attached && isYArrayIndexNoOp(state.yjsValue as Y.Array<unknown>, index, value)) {
           return true
         }
+
+        const rollbackCtx = getRollbackContext()
+        if (rollbackCtx?.canRollback) {
+          const currentLength = proxy.length
+          if (index < currentLength) {
+            const oldValue = proxy[index]
+            rollbackCtx.log(() => {
+              proxy[index] = oldValue
+            })
+          } else {
+            // Extending array - rollback by truncating
+            rollbackCtx.log(() => {
+              proxy.length = currentLength
+            })
+          }
+        }
+
         applyToAllAliases<Y.Array<unknown>, any[]>(
           proxy as YjsProxy,
           (arr) => setYArrayIndex(arr, index, value),
@@ -405,6 +488,16 @@ export function createYArrayProxy(state: ProxyState<any>): any[] {
         const arr = state.yjsValue as Y.Array<unknown>
         if (index >= arr.length || arr.get(index) === null) {
           return true
+        }
+      }
+
+      const rollbackCtx = getRollbackContext()
+      if (rollbackCtx?.canRollback) {
+        if (index < proxy.length && proxy[index] !== null) {
+          const oldValue = proxy[index]
+          rollbackCtx.log(() => {
+            proxy[index] = oldValue
+          })
         }
       }
 

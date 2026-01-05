@@ -1,5 +1,11 @@
 # Changelog
 
+## 2.2.0
+
+### New Features
+
+- **Error rollback**: New `rollbackOnError: true` option for `withYjsProxy` that automatically reverts all Y.js changes if an error is thrown during the callback. Works in both auto and manual modes.
+
 ## 2.1.0
 
 ### New Features

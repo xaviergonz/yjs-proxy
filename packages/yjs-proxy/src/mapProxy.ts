@@ -3,6 +3,7 @@ import { dataToProxyCache, type ProxyState, setProxyState, tryGetProxyState } fr
 import { convertJsToYjsValue, convertYjsToJsValue } from "./conversion"
 import { detachProxyOfYjsValue } from "./detachProxyOfYjsValue"
 import { failure } from "./error/failure"
+import { getRollbackContext } from "./rollback"
 import { applyToAllAliases, linkProxyWithExistingSiblings } from "./sharedRefs"
 import type { StringKeyedObject, YjsProxy } from "./types"
 import { tryUnwrapJson, tryUnwrapYjs } from "./unwrapYjs"
@@ -105,6 +106,22 @@ export function createYMapProxy(state: ProxyState<any>): StringKeyedObject {
       if (state.attached && isYMapSetNoOp(state.yjsValue as Y.Map<unknown>, prop, value)) {
         return true
       }
+
+      const rollbackCtx = getRollbackContext()
+      if (rollbackCtx?.canRollback) {
+        // Read through proxy (works for both attached and detached)
+        const hadKey = prop in proxy
+        const oldValue = hadKey ? proxy[prop] : undefined
+
+        rollbackCtx.log(() => {
+          if (hadKey) {
+            proxy[prop] = oldValue // Propagates to aliases automatically
+          } else {
+            delete proxy[prop]
+          }
+        })
+      }
+
       applyToAllAliases<Y.Map<unknown>, any>(
         proxy as YjsProxy,
         (ymap) => setYMapValue(ymap, prop, value),
@@ -121,6 +138,18 @@ export function createYMapProxy(state: ProxyState<any>): StringKeyedObject {
       if (state.attached && isYMapDeleteNoOp(state.yjsValue as Y.Map<unknown>, prop)) {
         return true
       }
+
+      const rollbackCtx = getRollbackContext()
+      if (rollbackCtx?.canRollback) {
+        const hadKey = prop in proxy
+        if (hadKey) {
+          const oldValue = proxy[prop] // Read through proxy
+          rollbackCtx.log(() => {
+            proxy[prop] = oldValue
+          })
+        }
+      }
+
       applyToAllAliases<Y.Map<unknown>, any>(
         proxy as YjsProxy,
         (ymap) => deleteYMapValue(ymap, prop),

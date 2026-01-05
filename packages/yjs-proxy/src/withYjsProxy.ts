@@ -1,6 +1,7 @@
 import * as Y from "yjs"
 import { removeProxyFromCache } from "./cache"
 import { failure } from "./error/failure"
+import { createRollbackContext, getRollbackContext, setRollbackContext } from "./rollback"
 import type { YjsProxiableValue } from "./types"
 import { wrapYjs } from "./wrapYjs"
 
@@ -18,6 +19,8 @@ export interface AutoModeOptions {
   transactionMode?: "auto"
   /** Custom transaction origin (auto-generated symbol if not provided) */
   origin?: unknown
+  /** If true, rolls back Y.js changes if the callback throws. Default: false */
+  rollbackOnError?: boolean
 }
 
 /**
@@ -27,6 +30,8 @@ export interface ManualModeOptions {
   transactionMode: "manual"
   /** Custom transaction origin (auto-generated symbol if not provided) */
   origin?: unknown
+  /** If true, rolls back Y.js changes if the callback throws. Default: false */
+  rollbackOnError?: boolean
 }
 
 /**
@@ -244,12 +249,41 @@ export function withYjsProxy<Draft>(
     isProxyInvalidated: () => scope.invalidated,
   }
 
+  // Set up rollback context if enabled
+  const rollbackEnabled = options?.rollbackOnError ?? false
+  const rollbackCtx = rollbackEnabled ? createRollbackContext() : null
+
+  if (rollbackCtx) {
+    setRollbackContext(rollbackCtx)
+  }
+
+  // Helper to execute rollback if enabled and possible
+  const doRollback = () => {
+    if (rollbackCtx?.canRollback) {
+      transactAllDocs(docs, origin, () => {
+        rollbackCtx.executeRollback()
+      })
+    }
+  }
+
+  // Helper to clean up rollback context and scope
+  const doCleanup = () => {
+    if (rollbackCtx) {
+      setRollbackContext(null)
+    }
+    cleanup()
+  }
+
   if (mode === "manual") {
     // Set up deep observers for external change detection
     for (const v of values) {
       const observer = (_events: Y.YEvent<any>[], tx: Y.Transaction) => {
         if (tx.origin !== origin && !scope.invalidated) {
           scope.invalidated = true
+
+          // Invalidate rollback context - proxies are being revoked
+          getRollbackContext()?.invalidate()
+
           // Revoke proxies for this scope
           for (const [proxy, revoke] of scope.revokers) {
             revoke()
@@ -263,6 +297,7 @@ export function withYjsProxy<Draft>(
     }
 
     // Execute callback with context
+    let isAsync = false
     try {
       const result = (callback as (proxy: Draft, ctx: ManualModeContext) => void | Promise<void>)(
         proxyArg,
@@ -270,14 +305,23 @@ export function withYjsProxy<Draft>(
       )
 
       if (result instanceof Promise) {
-        return result.finally(cleanup)
-      } else {
-        cleanup()
-        return
+        isAsync = true
+        return result
+          .catch((e) => {
+            doRollback()
+            throw e
+          })
+          .finally(doCleanup)
       }
+      // Sync path - cleanup happens in finally below
     } catch (e) {
-      cleanup()
+      doRollback()
       throw e
+    } finally {
+      // Only cleanup for sync path (Promise handles its own cleanup via .finally)
+      if (!isAsync) {
+        doCleanup()
+      }
     }
   } else {
     // Auto mode - wrap in transaction
@@ -285,8 +329,11 @@ export function withYjsProxy<Draft>(
       transactAllDocs(docs, origin, () => {
         ;(callback as (proxy: Draft) => void)(proxyArg)
       })
+    } catch (e) {
+      doRollback()
+      throw e
     } finally {
-      cleanup()
+      doCleanup()
     }
   }
 }

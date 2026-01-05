@@ -204,6 +204,38 @@ withYjsProxy(ymap, (state) => {
 }, { origin: 'my-custom-origin' })
 ```
 
+#### Error Rollback
+
+Use `rollbackOnError: true` to automatically revert all changes if an error is thrown:
+
+```typescript
+withYjsProxy<State>(ymap, (state) => {
+  state.count = 1
+  state.items.push({ id: 'new' })
+
+  if (someCondition) {
+    throw new Error('Validation failed')
+    // All changes above will be rolled back
+  }
+}, { rollbackOnError: true })
+```
+
+This works in both auto and manual modes:
+
+```typescript
+await withYjsProxy<State>(ymap, async (state, ctx) => {
+  ctx.transact(() => {
+    state.count = 999
+  })
+
+  await validateWithServer()
+  throw new Error('Validation failed')
+  // Changes are rolled back
+}, { transactionMode: 'manual', rollbackOnError: true })
+```
+
+> **Note:** In manual mode, if proxies are invalidated by external changes before the error is thrown, rollback is skipped since the proxies can no longer be used to apply inverse operations.
+
 ### `toYjsProxy(value, options?)`
 
 Converts a plain JS object or array into a `yjs-proxy` proxy that starts in **detached mode**.
